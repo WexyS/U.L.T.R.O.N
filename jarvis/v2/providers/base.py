@@ -41,6 +41,10 @@ class BaseProvider(ABC):
     async def is_available(self) -> bool:
         pass
 
+    def is_available_sync(self) -> bool:
+        """Sync version for status checks. Override if provider supports sync checks."""
+        return self.is_configured()
+
     @abstractmethod
     async def chat(
         self, messages: list[Message],

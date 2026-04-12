@@ -589,7 +589,7 @@ class LLMRouter:
         healthy = []
         for name in self.priority_order:
             provider = self.providers.get(name)
-            if provider and provider.is_available():
+            if provider and provider.is_configured():
                 healthy.append(name)
         return healthy
 
@@ -679,7 +679,7 @@ class LLMRouter:
             provider = self.providers.get(name)
             if provider:
                 result[name] = {
-                    "available": provider.is_available(),
+                    "available": provider.is_configured(),
                     "model": provider.get_model_name(),
                     "stats": {
                         "total_calls": provider.stats.total_calls,
