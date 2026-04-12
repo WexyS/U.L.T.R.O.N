@@ -18,12 +18,14 @@ from .base import BaseProvider, Message, ProviderConfig, ProviderResult
 # Anthropic Claude
 # ──────────────────────────────────────────────────────────────
 class AnthropicProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("ANTHROPIC_API_KEY")
+        md = model or "claude-3-5-sonnet-20241022"
         super().__init__(ProviderConfig(
             name="anthropic",
-            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            api_key=ak,
             base_url="https://api.anthropic.com/v1",
-            default_model="claude-3-5-sonnet-20241022",
+            default_model=md,
             max_tokens=8192, timeout=60, priority=2,
         ))
 
@@ -112,12 +114,14 @@ class AnthropicProvider(BaseProvider):
 # Mistral AI
 # ──────────────────────────────────────────────────────────────
 class MistralProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("MISTRAL_API_KEY")
+        md = model or "mistral-large-latest"
         super().__init__(ProviderConfig(
             name="mistral",
-            api_key=os.getenv("MISTRAL_API_KEY"),
+            api_key=ak,
             base_url="https://api.mistral.ai/v1",
-            default_model="mistral-large-latest",
+            default_model=md,
             max_tokens=8192, timeout=60, priority=3,
         ))
 
@@ -178,12 +182,14 @@ class MistralProvider(BaseProvider):
 # Cohere
 # ──────────────────────────────────────────────────────────────
 class CohereProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("COHERE_API_KEY")
+        md = model or "command-r-plus"
         super().__init__(ProviderConfig(
             name="cohere",
-            api_key=os.getenv("COHERE_API_KEY"),
+            api_key=ak,
             base_url="https://api.cohere.ai/v1",
-            default_model="command-r-plus",
+            default_model=md,
             max_tokens=4096, timeout=60, priority=4,
         ))
 
@@ -253,12 +259,14 @@ class CohereProvider(BaseProvider):
 # DeepSeek
 # ──────────────────────────────────────────────────────────────
 class DeepSeekProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("DEEPSEEK_API_KEY")
+        md = model or "deepseek-chat"
         super().__init__(ProviderConfig(
             name="deepseek",
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
+            api_key=ak,
             base_url="https://api.deepseek.com/v1",
-            default_model="deepseek-chat",
+            default_model=md,
             max_tokens=8192, timeout=60, priority=2,
         ))
 
@@ -318,12 +326,14 @@ class DeepSeekProvider(BaseProvider):
 # Fireworks AI
 # ──────────────────────────────────────────────────────────────
 class FireworksProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("FIREWORKS_API_KEY")
+        md = model or "accounts/fireworks/models/llama-v3p1-8b-instruct"
         super().__init__(ProviderConfig(
             name="fireworks",
-            api_key=os.getenv("FIREWORKS_API_KEY"),
+            api_key=ak,
             base_url="https://api.fireworks.ai/inference/v1",
-            default_model="accounts/fireworks/models/llama-v3p1-8b-instruct",
+            default_model=md,
             max_tokens=4096, timeout=60, priority=3,
         ))
 

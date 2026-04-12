@@ -497,28 +497,39 @@ class LLMRouter:
     def enable_groq(self, api_key: str, model: str = "fast"):
         """Add Groq — ultra-fast free tier (300-500 tok/s)."""
         if api_key and api_key.startswith("gsk_"):
-            from jarvis.v2.core.providers import GroqProvider
-            self.providers["groq"] = GroqProvider(api_key=api_key, model=model)
+            from jarvis.v2.providers.all_providers import GroqProvider
+            # Map shorthand model names to actual Groq model names
+            model_map = {
+                "fast": "llama-3.3-70b-versatile",
+                "llama": "llama-3.3-70b-versatile",
+                "mixtral": "mixtral-8x7b-32768",
+                "gemma": "gemma2-9b-it",
+            }
+            actual_model = model_map.get(model, model)
+            self.providers["groq"] = GroqProvider(api_key=api_key, model=actual_model)
             if "groq" not in self.priority_order:
-                self.priority_order.insert(0, "groq")  # Groq is fastest
-                logger.info("Groq enabled (%s) - FREE, ultra-fast", model)
+                self.priority_order.insert(0, "groq")
+                logger.info("Groq enabled (%s) - FREE, ultra-fast", actual_model)
 
     def enable_gemini(self, api_key: str, model: str = "gemini-2.0-flash"):
         """Add Google Gemini — free tier, 1M+ context."""
         if api_key and api_key.startswith("AIza"):
-            from jarvis.v2.core.providers import GeminiProvider
+            from jarvis.v2.providers.all_providers import GeminiProvider
             self.providers["gemini"] = GeminiProvider(api_key=api_key, model=model)
             if "gemini" not in self.priority_order:
-                idx = len(self.priority_order) - 1  # Before last (openai/openrouter)
+                idx = len(self.priority_order) - 1
                 self.priority_order.insert(idx, "gemini")
                 logger.info("Google Gemini enabled (%s) - FREE, 1M context", model)
 
     def enable_cloudflare(self, api_key: str, account_id: str, model: str = "small"):
         """Add Cloudflare Workers AI — free, 10K/day."""
         if api_key and account_id:
-            from jarvis.v2.core.providers import CloudflareProvider
+            from jarvis.v2.providers.all_providers import CloudflareProvider
+            # Set account_id in env so CloudflareProvider can use it
+            import os
+            os.environ.setdefault("CLOUDFLARE_ACCOUNT_ID", account_id)
             self.providers["cloudflare"] = CloudflareProvider(
-                api_key=api_key, account_id=account_id, model=model)
+                api_key=api_key, model=model)
             if "cloudflare" not in self.priority_order:
                 idx = 1
                 self.priority_order.insert(idx, "cloudflare")
@@ -527,7 +538,7 @@ class LLMRouter:
     def enable_together(self, api_key: str, model: str = "Qwen/Qwen2.5-72B-Instruct-Turbo"):
         """Add Together AI — $25 free credits."""
         if api_key:
-            from jarvis.v2.core.providers import TogetherProvider
+            from jarvis.v2.providers.all_providers import TogetherProvider
             self.providers["together"] = TogetherProvider(api_key=api_key, model=model)
             if "together" not in self.priority_order:
                 idx = len(self.priority_order) - 1
@@ -537,8 +548,8 @@ class LLMRouter:
     def enable_huggingface(self, api_key: str, model: str = "Qwen/Qwen2.5-72B-Instruct"):
         """Add Hugging Face Inference API — free tier."""
         if api_key:
-            from jarvis.v2.core.providers import HuggingFaceProvider
-            self.providers["huggingface"] = HuggingFaceProvider(api_key=api_key, model=model)
+            from jarvis.v2.providers.all_providers import HFProvider
+            self.providers["huggingface"] = HFProvider(api_key=api_key, model=model)
             if "huggingface" not in self.priority_order:
                 idx = len(self.priority_order) - 1
                 self.priority_order.insert(idx, "huggingface")
