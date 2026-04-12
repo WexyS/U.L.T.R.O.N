@@ -19,6 +19,8 @@ function App() {
     isConnected,
     error,
     status,
+    providers,
+    workspace,
     sendMessage,
     clearMessages,
   } = useJarvis();
@@ -108,7 +110,7 @@ function App() {
             transition={{ duration: 0.2 }}
             className="border-l border-jarvis-border bg-jarvis-panel/80 backdrop-blur-sm overflow-hidden"
           >
-            <InspectorPanel />
+            <InspectorPanel status={status} providers={providers} workspace={workspace} />
           </motion.div>
         )}
       </AnimatePresence>

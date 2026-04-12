@@ -31,30 +31,33 @@ export function useJarvis({
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<any>(null);
+  const [providers, setProviders] = useState<any>(null);
+  const [workspace, setWorkspace] = useState<any>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Use ref to track current response (avoids stale closure problem)
   const responseBuffer = useRef('');
 
   // Poll system status
   useEffect(() => {
-    const pollStatus = async () => {
+    const pollAll = async () => {
       try {
-        const res = await fetch(`${apiUrl}/status`);
-        if (res.ok) {
-          const data = await res.json();
-          setStatus(data);
-          setError(null);
-        }
+        const [statusRes, providersRes, workspaceRes] = await Promise.all([
+          fetch(`${apiUrl}/status`).then(r => r.ok ? r.json() : null),
+          fetch(`${apiUrl}/providers`).then(r => r.ok ? r.json() : null),
+          fetch(`${apiUrl}/api/v2/workspace/list`).then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        if (statusRes) setStatus(statusRes);
+        if (providersRes) setProviders(providersRes);
+        if (workspaceRes) setWorkspace(workspaceRes);
       } catch {
-        // Silent fail during polling
+        // Silent fail
       }
     };
 
-    pollStatus();
-    const interval = setInterval(pollStatus, 5000);
+    pollAll();
+    const interval = setInterval(pollAll, 5000);
     return () => clearInterval(interval);
   }, [apiUrl]);
 
@@ -188,6 +191,8 @@ export function useJarvis({
     isConnected,
     error,
     status,
+    providers,
+    workspace,
     sendMessage,
     clearMessages,
     connect,
