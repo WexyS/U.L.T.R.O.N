@@ -42,6 +42,9 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
     localStorage.setItem('jarvis-theme', theme);
+    
+    // Also set body class for safety
+    document.body.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
   const toggleTheme = () => {

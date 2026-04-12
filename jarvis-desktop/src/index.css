@@ -29,6 +29,10 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  
+  /* Default to light background */
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
 /* Dark theme */
@@ -53,6 +57,30 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+}
+
+/* Ensure body always has background */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg) !important;
+  color: var(--color-text) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  margin: 0;
+  padding: 0;
+}
+
+/* Root element must have background too */
+html {
+  background-color: var(--color-bg) !important;
+}
+
+/* Ensure #root has background */
+#root {
+  background-color: var(--color-bg) !important;
+  min-height: 100vh;
 }
 
 * {
