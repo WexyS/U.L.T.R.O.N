@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,9 +9,18 @@
 }
 
 body {
-  background-color: #050a10;
+  background-color: #0a0a0f;
   margin: 0;
   padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(26, 26, 46, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(42, 42, 74, 0.5);
 }
 
 /* Scrollbar styling */
@@ -19,16 +30,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a1423;
+  background: #0a0a0f;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e3a5f;
+  background: #2a2a4a;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2a5080;
+  background: #3a3a5a;
 }
 
 /* Markdown styling */
@@ -38,16 +49,16 @@ body {
 }
 
 .prose pre {
-  background-color: #0a1423;
-  border: 1px solid #1e3a5f;
+  background-color: #16213e;
+  border: 1px solid #2a2a4a;
   border-radius: 0.5rem;
 }
 
 .prose code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.875rem;
-  background-color: #0a1423;
-  color: #00ff88;
+  background-color: #16213e;
+  color: #10b981;
   padding: 0.125rem 0.25rem;
   border-radius: 0.25rem;
 }
@@ -60,7 +71,7 @@ body {
 
 .prose blockquote {
   border-left-color: #00d4ff;
-  color: #5a7b9c;
+  color: #8892b0;
 }
 
 .prose strong {
@@ -91,7 +102,7 @@ body {
 .prose h1 {
   font-size: 1.875rem;
   font-weight: 600;
-  border-bottom: 1px solid #1e3a5f;
+  border-bottom: 1px solid #2a2a4a;
   padding-bottom: 0.5rem;
 }
 
@@ -119,4 +130,24 @@ body {
 
 .cursor-blink {
   animation: blink 1s step-end infinite;
+}
+
+/* Wave animation for voice indicator */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1); }
+}
+
+.animate-wave {
+  animation: wave 1.5s ease-in-out infinite;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 212, 255, 0.1);
 }

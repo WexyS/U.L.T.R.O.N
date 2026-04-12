@@ -66,6 +66,15 @@ dependencies = [
     # ── API Security & Logging ────────────────────────────────────────
     "slowapi>=0.1.9",
     "structlog>=24.0.0",
+
+    # ── Workspace & Agent RAG ─────────────────────────────────────────
+    "playwright>=1.44.0",
+    "asyncio-throttle>=1.0.3",
+    "bleach>=6.1.0",
+    "cssutils>=2.10.0",
+
+    # ── Additional Provider SDKs (optional) ───────────────────────────
+    "tenacity>=8.3.0",
 ]
 
 [project.optional-dependencies]

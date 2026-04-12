@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -148,6 +149,11 @@ app.include_router(chat_router)
 app.include_router(agents_router)
 app.include_router(status_router)
 
+# Workspace models — needed for endpoint type hints
+from jarvis.v2.workspace.models import CloneRequest, GenerateRequest, SynthesizeRequest
+
+# Workspace manager — lazy init to avoid heavy imports at startup
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     if _use_structlog:
@@ -185,6 +191,143 @@ async def health(request: Request):
             "uptime_seconds": round(uptime, 1),
         },
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Workspace API Endpoints (FAZ 2 — Master Workspace + Agentic RAG)
+# ═══════════════════════════════════════════════════════════════════════
+
+_workspace_mgr = None
+
+async def get_workspace_mgr():
+    global _workspace_mgr
+    if _workspace_mgr is None:
+        from jarvis.v2.workspace.workspace_manager import WorkspaceManager
+        _workspace_mgr = WorkspaceManager()
+        await _workspace_mgr.init_db()
+    return _workspace_mgr
+
+
+@app.post("/api/v2/workspace/clone")
+@limiter.limit("5/minute")
+async def clone_site(req: CloneRequest, request: Request):
+    """n8n veya frontend tarafından çağrılır. URL'yi klonlar."""
+    try:
+        mgr = await get_workspace_mgr()
+        item = await mgr.clone_site(req)
+        return {"success": True, "item": item.dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/v2/workspace/generate")
+@limiter.limit("10/minute")
+async def generate_app(req: GenerateRequest, request: Request):
+    """Fikir metninden sıfırdan uygulama üretir."""
+    try:
+        mgr = await get_workspace_mgr()
+        item = await mgr.generate_app(req)
+        return {"success": True, "item": item.dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/v2/workspace/synthesize")
+@limiter.limit("10/minute")
+async def synthesize(req: SynthesizeRequest, request: Request):
+    """Mevcut şablonlardan yeni uygulama sentezler."""
+    try:
+        mgr = await get_workspace_mgr()
+        item = await mgr.synthesize(req)
+        return {"success": True, "item": item.dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v2/workspace/list")
+async def list_workspace():
+    mgr = await get_workspace_mgr()
+    items = await mgr.list_workspace()
+    return {"items": [i.dict() for i in items]}
+
+
+@app.get("/api/v2/workspace/search")
+async def search_workspace(q: str, top_k: int = 5):
+    mgr = await get_workspace_mgr()
+    results = await mgr.search_templates(q, top_k)
+    return {"results": results}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Provider Router API — Multi-provider chat + status
+# ═══════════════════════════════════════════════════════════════════════
+
+_provider_router = None
+
+
+def _get_provider_router():
+    global _provider_router
+    if _provider_router is None:
+        from jarvis.v2.providers.router import ProviderRouter
+        _provider_router = ProviderRouter()
+    return _provider_router
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    task_type: str = "default"
+    preferred_provider: Optional[str] = None
+    model: Optional[str] = None
+    stream: bool = False
+
+
+@app.post("/api/v2/chat")
+@limiter.limit("30/minute")
+async def provider_chat(req: ChatRequest, request: Request):
+    """Multi-provider chat with smart routing + fallback."""
+    try:
+        from jarvis.v2.providers.base import Message as ProviderMessage
+
+        router = _get_provider_router()
+        messages = [ProviderMessage(role=m.role, content=m.content) for m in req.messages]
+        result = await router.route(
+            messages,
+            task_type=req.task_type,
+            preferred_provider=req.preferred_provider,
+            model=req.model,
+            stream=req.stream,
+        )
+        return {
+            "success": True,
+            "content": result.content,
+            "provider": result.provider,
+            "model": result.model,
+            "tokens_used": result.tokens_used,
+            "latency_ms": result.latency_ms,
+        }
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v2/providers/status")
+async def providers_status():
+    """Show which providers are active and their latency."""
+    try:
+        router = _get_provider_router()
+        status = await router.provider_status()
+        return {
+            "available": router.available_providers(),
+            "details": status,
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 async def get_orchestrator():
     return _orchestrator

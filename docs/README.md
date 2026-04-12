@@ -1,116 +1,119 @@
-# J.A.R.V.I.S v2.0 — Kullanım Kılavuzu
+# J.A.R.V.I.S v2.1 — User Guide
 
-Kişisel, yerel çalışan çoklu-agent yapay zeka asistanı. FastAPI + React/Tauri GUI + Ollama.
+Personal, locally-hosted multi-agent AI assistant. FastAPI + React GUI + 13 AI providers.
 
 ---
 
-## Kurulum
+## Setup
 
-### Gereksinimler
+### Prerequisites
 - Python 3.10+
-- Node.js 18+ (GUI için)
-- Ollama (LLM runtime)
+- Node.js 18+ (for GUI)
+- Ollama (local LLM runtime)
 
-### Adımlar
+### Steps
 
 ```bash
-# 1. Sanal ortam oluştur ve aktive et
+# 1. Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\activate  # Windows
 source .venv/bin/activate  # macOS/Linux
 
-# 2. Bağımlılıkları yükle
+# 2. Install dependencies
 pip install -e ".[dev]"
 
-# 3. Ollama'yı kur ve model indir
+# 3. Install Playwright Chromium (for workspace cloning)
+playwright install chromium
+
+# 4. Download Ollama model
 ollama pull qwen2.5:14b
 
-# 4. .env dosyasını oluştur
+# 5. Create .env file
 cp .env.example .env
-# .env dosyasını düzenle (API key'ler opsiyonel)
+# Edit .env with your API keys (optional)
 
-# 5. Backend'i başlat
+# 6. Start backend
 python -m uvicorn jarvis.api.main:app --host 127.0.0.1 --port 8000
 
-# 6. GUI'yi başlat (opsiyonel)
+# 7. Start GUI (optional, in another terminal)
 cd jarvis-desktop && npm install && npm run dev
 ```
 
-### Hızlı Başlatma
+### Quick Start
 
 ```bash
-# Tek tuşla başlatma (Windows)
+# One-click launch (Windows)
 start-jarvis-desktop.bat
 ```
 
 ---
 
-## Ajanlar ve Komutlar
+## Agents and Commands
 
-### 🤖 Mevcut Ajanlar
+### Available Agents
 
-| Ajan | Açıklama | Örnek Komutlar |
-|------|----------|----------------|
-| **CoderAgent** | Kod yazma, debug, çalıştırma | "Python ile fibonacci yaz" |
-| **ResearcherAgent** | Web araştırması, sentez | "Quantum computing nedir?" |
-| **RPAOperatorAgent** | Bilgisayar kontrolü | "Chrome'u aç" |
-| **EmailAgent** | E-posta okuma, özetleme, gönderme | "Maillerimi özetle" |
-| **SystemMonitorAgent** | CPU/RAM/disk izleme | "Sistem durumu nedir?" |
-| **ClipboardAgent** | Pano analizi | "Panodaki kodu analiz et" |
-| **MeetingAgent** | Toplantı kaydı ve transkripsiyon | "Toplantıyı kaydet" |
-| **FileOrganizerAgent** | Dosya düzenleme | "İndirilenleri düzenle" |
+| Agent | Description | Example Commands |
+|-------|-------------|------------------|
+| **CoderAgent** | Code writing, debugging, execution | "Write fibonacci in Python" |
+| **ResearcherAgent** | Web research, synthesis | "What is quantum computing?" |
+| **RPAOperatorAgent** | Computer control (screen, OCR, input) | "Open Chrome" |
+| **EmailAgent** | Email reading, summarization, sending | "Summarize my emails" |
+| **SystemMonitorAgent** | CPU/RAM/disk monitoring | "What's the system status?" |
+| **ClipboardAgent** | Clipboard content analysis | "Analyze the code in clipboard" |
+| **MeetingAgent** | Meeting recording and transcription | "Start recording meeting" |
+| **FileOrganizerAgent** | File organization, duplicate detection | "Organize my desktop" |
 
-### E-posta Ajanı
+### Email Agent
 ```
-"emaillerimi oku"          → Son 10 email listele
-"sabah özeti"              → En önemli 5 emaili özetle
-"ahmet'e şunu yaz"         → Taslak oluştur
-"gönder"                   → Taslağı gönder
+"read my emails"           → List last 10 emails
+"morning briefing"         → Summarize top 5 important emails
+"write this to ahmet"      → Draft email
+"send"                    → Send the draft
 ```
 
-### Meeting Ajanı
+### Meeting Agent
 ```
-"toplantıyı kaydet"        → Mikrofonu başlat
-"toplantıyı durdur"        → Kaydı durdur, transkribe et
-"özet çıkar"              → Özet + aksiyon öğeleri
+"start recording"          → Start microphone recording
+"stop meeting"            → Stop recording and transcribe
+"summarize"               → Generate summary + action items
 ```
 
 ### File Organizer
 ```
-"masaüstünü düzenle"       → Desktop dosyalarını kategorize et
-"yinelenen dosyaları bul"  → Duplicate tespiti
-"indirilenleri düzenle"    → Downloads klasörünü organize et
+"organize desktop"        → Categorize desktop files
+"find duplicates"         → Detect duplicate files
+"organize downloads"      → Sort the Downloads folder
 ```
 
 ---
 
-## Memory Sistemi
+## Memory System
 
-Jarvis 3 katmanlı bellek mimarisi kullanır:
+Jarvis uses a 3-layer unified memory architecture:
 
-### 1. Working Memory (Kısa Süreli)
-- Son 20 mesajı tutar (deque)
-- Token sınırı: 4000 token
-- Aşıldığında otomatik özetleme
+### 1. Working Memory (Short-Term)
+- Holds last 20 messages (deque)
+- Token limit: 4000 tokens
+- Auto-summarizes when exceeded
 
-### 2. Long-Term Memory (Uzun Süreli)
-- **SQLite + FTS5**: Metin tabanlı arama
-- **ChromaDB**: Vektör tabanlı semantik arama
-- **Hibrit arama**: RRF (Reciprocal Rank Fusion) ile birleştirme
-- **Decay**: 90 günden eski, önemsiz bilgiler unutulur
-- **Consolidation**: Gece 03:00'te otomatik konsolidasyon
+### 2. Long-Term Memory
+- **SQLite + FTS5**: Full-text lexical search
+- **ChromaDB**: Vector-based semantic search
+- **Hybrid search**: Combined via Reciprocal Rank Fusion (RRF)
+- **Decay**: Unimportant memories older than 90 days fade away
+- **Consolidation**: Auto-consolidation at 03:00 nightly
 
-### 3. Procedural Memory (Stratejiler)
-- Başarılı görev tamamlama pattern'leri
-- Exponential moving average ile başarı oranı
-- Benzer görevlerde en iyi strateji önerilir
+### 3. Procedural Memory (Strategies)
+- Successful task completion patterns
+- Exponential moving average success rates
+- Recommends best strategy for similar tasks
 
 ---
 
-## Konfigürasyon
+## Configuration
 
 ### config/agents.yaml
-Her ajanın ayarları bu dosyada tanımlanır:
+Each agent's settings are defined here:
 
 ```yaml
 agents:
@@ -123,48 +126,103 @@ agents:
       cpu_percent: 85
   meeting:
     whisper_model: "base"
-    language: "tr"
+    language: "en"
 ```
 
-### .env Değişkenleri
+### .env Variables
 ```
 JARVIS_EMAIL_USER=your@email.com
 JARVIS_EMAIL_PASS=your_app_password
-JARVIS_API_KEY=optional_api_key     # API koruması için
+JARVIS_API_KEY=optional_api_key     # For API protection
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
-### İsteğe Bağlı API Key'ler
-`.env.example` dosyasında tüm desteklenen LLM sağlayıcıları listelenir.
-Hiçbiri zorunlu değildir — varsayılan olarak Ollama kullanılır.
+### Optional API Keys
+All supported LLM providers are listed in `.env.example`.
+None are required — Ollama is the default and only mandatory provider.
+
+---
+
+## AI Providers
+
+Jarvis supports **13 AI providers** with smart routing and automatic fallback:
+
+| # | Provider | Type | Cost |
+|---|----------|------|------|
+| 1 | Ollama | Local | Free |
+| 2 | Groq | Cloud | Free |
+| 3 | DeepSeek | Cloud | ~$0.14/M tokens |
+| 4 | Anthropic | Cloud | Paid |
+| 5 | OpenRouter | Cloud | Free + Paid |
+| 6 | Gemini | Cloud | Free |
+| 7 | Mistral | Cloud | Paid |
+| 8 | Fireworks | Cloud | Paid |
+| 9 | Cloudflare | Cloud | Free (10K/day) |
+| 10 | Together | Cloud | Free ($25 credit) |
+| 11 | Cohere | Cloud | Paid |
+| 12 | HuggingFace | Cloud | Free tier |
+| 13 | OpenAI | Cloud | Paid |
+
+Providers are selected automatically based on task type (fast, code, long, cheap, creative, private) with fallback chain if any provider fails.
+
+---
+
+## Workspace + RAG
+
+Clone websites, generate apps from ideas, synthesize from templates.
+
+### Clone a Website
+```bash
+curl -X POST http://localhost:8000/api/v2/workspace/clone \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+```
+
+### Generate an App
+```bash
+curl -X POST http://localhost:8000/api/v2/workspace/generate \
+  -H "Content-Type: application/json" \
+  -d '{"idea": "Todo app with dark theme"}'
+```
+
+### RAG Synthesis
+```bash
+curl -X POST http://localhost:8000/api/v2/workspace/synthesize \
+  -H "Content-Type: application/json" \
+  -d '{"user_command": "Dark dashboard with charts", "target_project": "my-dash"}'
+```
 
 ---
 
 ## API Endpoints
 
-| Endpoint | Method | Açıklama |
-|----------|--------|----------|
-| `/health` | GET | Sağlık kontrolü |
-| `/` | GET | API bilgileri |
-| `/chat` | POST | Sohbet endpointi |
-| `/agents` | GET | Ajan listesi |
-| `/status` | GET | Sistem durumu |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/` | GET | API info |
+| `/chat` | POST | Chat endpoint |
+| `/api/v2/chat` | POST | Multi-provider chat with routing |
+| `/api/v2/providers/status` | GET | Provider availability |
+| `/agents` | GET | Agent list |
+| `/status` | GET | System status |
+| `/api/v2/workspace/*` | Various | Workspace operations |
 
 ### Rate Limiting
-- `/health`: 60 istek/dakika
-- `/chat`: 30 istek/dakika
-- Aşıldığında `429 Too Many Requests` döner
+- `/health`: 60 requests/minute
+- `/api/v2/chat`: 30 requests/minute
+- `/api/v2/workspace/clone`: 5 requests/minute
+- Returns `429 Too Many Requests` when exceeded
 
-### API Key Koruma (Opsiyonel)
-`.env`'de `JARVIS_API_KEY` tanımlıysa:
+### API Key Protection (Optional)
+If `JARVIS_API_KEY` is set in `.env`:
 ```
 X-API-Key: your_secret_key
 ```
-header'ı zorunludur.
+header is required for all requests.
 
 ---
 
-## Test Çalıştırma
+## Running Tests
 
 ```bash
 pytest tests/ -v --cov=jarvis
@@ -172,6 +230,6 @@ pytest tests/ -v --cov=jarvis
 
 ---
 
-## Lisans
+## License
 
-MIT License — Copyright (c) 2025 WexyS
+MIT License — Copyright (c) 2025-2026 WexyS
