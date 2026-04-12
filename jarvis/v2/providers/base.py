@@ -42,8 +42,12 @@ class BaseProvider(ABC):
         pass
 
     def is_available_sync(self) -> bool:
-        """Sync version for status checks. Override if provider supports sync checks."""
+        """Sync version for status checks."""
         return self.is_configured()
+
+    def get_model_name(self) -> str:
+        """Return the default model name."""
+        return self.config.default_model
 
     @abstractmethod
     async def chat(
