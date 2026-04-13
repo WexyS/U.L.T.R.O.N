@@ -81,21 +81,21 @@ export default function ChatArea({ messages, currentResponse, isStreaming }: Cha
             </div>
             <div className="absolute -inset-2 rounded-full border border-ultron-primary/20 animate-spin-slow" />
           </div>
-          <h2 className="text-2xl font-semibold text-white mb-2">Ultron v2.0</h2>
-          <p className="text-ultron-textMuted max-w-md">
+          <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Ultron v2.0</h2>
+          <p className="max-w-md" style={{ color: 'var(--color-text-secondary)' }}>
             Your personal AI assistant is ready. Ask me anything, write code, conduct research, or control your system.
           </p>
           <div className="mt-8 grid grid-cols-2 gap-3 text-sm">
-            <div className="p-3 rounded-lg bg-ultron-panel border border-ultron-border/50 text-ultron-textMuted">
+            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
               💬 General chat & questions
             </div>
-            <div className="p-3 rounded-lg bg-ultron-panel border border-ultron-border/50 text-ultron-textMuted">
+            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
               💻 Code generation & debugging
             </div>
-            <div className="p-3 rounded-lg bg-ultron-panel border border-ultron-border/50 text-ultron-textMuted">
+            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
               🔍 Deep research & analysis
             </div>
-            <div className="p-3 rounded-lg bg-ultron-panel border border-ultron-border/50 text-ultron-textMuted">
+            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
               🖥️ System control & RPA
             </div>
           </div>

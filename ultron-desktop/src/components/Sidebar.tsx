@@ -16,7 +16,7 @@ export default function Sidebar({ status, onClear, activePanel, onPanelChange }:
       <div className="px-6 py-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgb(var(--color-accent)), #4f46e5)' }}>
-            <Zap className="w-6 h-6 text-white" />
+            <Zap className="w-6 h-6" style={{ color: 'white' }} />
           </div>
           <div>
             <h1 className="text-lg font-bold" style={{ color: 'var(--color-text)' }}>Ultron</h1>
