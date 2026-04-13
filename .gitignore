@@ -49,3 +49,11 @@ Thumbs.db
 memory.db
 memory.db-journal
 procedures.db
+
+# ─── AI Bridge (Qwen ↔ Gemini - GİZLİ) ─────────────────────────────────
+# Bu dosyalar GitHub'a gönderilmemeli!
+gemini_requests.md
+qwen_responses.md
+ai_bridge_status.md
+context/
+data/bridge_state.json
