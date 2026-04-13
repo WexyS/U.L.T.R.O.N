@@ -29,7 +29,7 @@ class SleepCycleEngine:
     def __init__(
         self,
         memory_engine,  # MemoryEngine instance
-        airllm_model: Optional[str] = None,
+        airllm_model: Optional[str] = "meta-llama/Meta-Llama-3.1-405B-Instruct",
         airllm_compression: Optional[str] = '4bit'
     ):
         self.memory = memory_engine
@@ -237,10 +237,21 @@ class SleepCycleEngine:
             Keep the analysis concise and actionable.
             """
             
-            # AirLLM inference (slow but powerful)
-            # TODO: Actual implementation with tokenizer
-            output = f"AirLLM analysis completed at {datetime.now().isoformat()}"
+            logger.info("⏳ Llama-3.1-405B derin analize başladı (Bu işlem saatler sürebilir)...")
             
+            input_text = [prompt]
+            inputs = self.airllm_model.tokenizer(input_text, max_length=2048, return_tensors="pt")
+            
+            outputs = await asyncio.to_thread(
+                self.airllm_model.generate,
+                inputs['input_ids'],
+                max_new_tokens=1024,
+                use_cache=True,
+                return_dict_in_generate=True
+            )
+            
+            output = self.airllm_model.tokenizer.decode(outputs.sequences[0], skip_special_tokens=True)
+
             return {
                 "analysis": output,
                 "model": self.airllm_model_name,

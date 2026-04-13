@@ -80,6 +80,10 @@ dependencies = [
     "sentence-transformers>=2.2.0",    # already present — confirmed
     "aiosqlite>=0.20.0",               # already present — confirmed
     "google-generativeai>=0.8.0",      # Gemini SDK
+
+    # ── AirLLM (Massive Local Models) ─────────────────────────────────
+    "airllm>=2.8.0",
+    "accelerate>=0.26.0",
 ]
 
 [project.optional-dependencies]
