@@ -145,10 +145,12 @@ app.add_middleware(BaseHTTPMiddleware, dispatch=_log_request_middleware)
 from ultron.api.routes.chat import router as chat_router
 from ultron.api.routes.agents import router as agents_router
 from ultron.api.routes.status import router as status_router
+from ultron.api.routes.training import router as training_router
 
 app.include_router(chat_router)
 app.include_router(agents_router)
 app.include_router(status_router)
+app.include_router(training_router)
 
 # Workspace models — needed for endpoint type hints
 from ultron.v2.workspace.models import CloneRequest, GenerateRequest, SynthesizeRequest

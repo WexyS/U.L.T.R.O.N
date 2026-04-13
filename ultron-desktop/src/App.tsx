@@ -7,10 +7,11 @@ import StatusBadge from './components/StatusBadge';
 import InspectorPanel from './components/InspectorPanel';
 import WorkspacePanel from './components/WorkspacePanel';
 import AgentsPanel from './components/AgentsPanel';
+import TrainingPanel from './components/TrainingPanel';
 import { AlertTriangle, WifiOff, PanelRightClose, PanelRightOpen, Sparkles, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type ActivePanel = 'chat' | 'workspace' | 'agents';
+type ActivePanel = 'chat' | 'workspace' | 'agents' | 'training';
 type Theme = 'light' | 'dark';
 
 function App() {
@@ -110,6 +111,20 @@ function App() {
               >
                 🤖 Agents
               </button>
+              <button
+                onClick={() => setActivePanel('training')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+                  activePanel === 'training'
+                    ? 'shadow-sm'
+                    : 'hover:opacity-80'
+                }`}
+                style={{
+                  backgroundColor: activePanel === 'training' ? 'var(--color-bg)' : 'transparent',
+                  color: activePanel === 'training' ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                }}
+              >
+                🧠 Training
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -169,8 +184,10 @@ function App() {
           </>
         ) : activePanel === 'workspace' ? (
           <WorkspacePanel />
-        ) : (
+        ) : activePanel === 'agents' ? (
           <AgentsPanel />
+        ) : (
+          <TrainingPanel />
         )}
       </div>
 
