@@ -144,8 +144,27 @@ class TaskQueue:
             return True
         else:
             task.status = TaskStatus.FAILED
+            task.completed_at = datetime.now()
+            self._completed[task_id] = task
             logger.error("Task failed (max retries): %s - %s", task.name, error)
+            self._cancel_dependent_tasks(task_id)
             return False
+            
+    def _cancel_dependent_tasks(self, failed_task_id: str) -> None:
+        """Bir görev iptal/fail olduğunda, ona bağlı görevleri (dependency) de rekürsif iptal et."""
+        to_cancel = []
+        for task in self._queue:
+            if failed_task_id in task.dependencies and task.status != TaskStatus.CANCELLED:
+                task.status = TaskStatus.CANCELLED
+                task.error = f"Dependency failed: {failed_task_id}"
+                task.completed_at = datetime.now()
+                logger.warning("Task cancelled due to dependency failure: %s (Dependency: %s)", task.name, failed_task_id)
+                to_cancel.append(task)
+                
+        for t in to_cancel:
+            self._queue.remove(t)
+            self._completed[t.id] = t
+            self._cancel_dependent_tasks(t.id)
     
     def _are_dependencies_met(self, task: Task) -> bool:
         """Görevin bağımlılıkları karşılandı mı?"""

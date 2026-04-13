@@ -94,7 +94,7 @@ async def start_training(request: TrainingStartRequest):
         "created_at": datetime.now().isoformat(),
         "started_at": datetime.now().isoformat(),
         "completed_at": None,
-        "config": request.dict(),
+        "config": request.model_dump(),
         "logs": [],
         "error": None,
     }
@@ -243,20 +243,26 @@ async def list_models():
 
 
 async def _read_training_logs(job_id: str, process: subprocess.Popen):
-    """Read training logs in background"""
+    """Read training logs in background (non-blocking)."""
     global active_process
 
     try:
         if process.stdout:
-            for line in process.stdout:
+            # Non-blocking readline via thread executor
+            while True:
+                line = await asyncio.get_event_loop().run_in_executor(
+                    None, process.stdout.readline
+                )
+                if not line:
+                    break
                 if job_id in training_jobs:
                     training_jobs[job_id]["logs"].append(line.strip())
                     # Keep only last 1000 log lines
                     if len(training_jobs[job_id]["logs"]) > 1000:
                         training_jobs[job_id]["logs"] = training_jobs[job_id]["logs"][-1000:]
 
-        # Wait for process to complete
-        return_code = process.wait()
+        # Wait for process to complete (non-blocking)
+        return_code = await asyncio.to_thread(process.wait)
         active_process = None
 
         if job_id in training_jobs:

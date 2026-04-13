@@ -75,7 +75,7 @@ class MeetingAgent(Agent):
 
     async def execute(self, task: Task) -> TaskResult:
         """Execute a meeting-related task routed by intent."""
-        self.state.status = "busy"  # type: ignore[assignment]
+        self.state.status = AgentStatus.BUSY
         intent = task.intent.lower().strip()
         context = task.context
 
@@ -116,7 +116,7 @@ class MeetingAgent(Agent):
                 metadata={"intent": intent},
             )
         finally:
-            self.state.status = "idle"  # type: ignore[assignment]
+            self.state.status = AgentStatus.IDLE
 
     # ── intent handlers ────────────────────────────────────────────────
 

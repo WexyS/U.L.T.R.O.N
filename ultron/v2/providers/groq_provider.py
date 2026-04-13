@@ -32,15 +32,15 @@ class GroqProvider(BaseProvider):
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> ProviderResult:
-        m = model or self.config.default_model
+        model_name = model or self.config.default_model
         start = time.time()
 
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             resp = await client.post(
                 f"{self.config.base_url}/chat/completions",
                 json={
-                    "model": m,
-                    "messages": [m.dict() for m in messages],
+                    "model": model_name,
+                    "messages": [msg.model_dump() for msg in messages],
                     "max_tokens": max_tokens,
                     "temperature": temperature,
                 },
@@ -65,14 +65,14 @@ class GroqProvider(BaseProvider):
         messages: list[Message],
         model: Optional[str] = None,
     ) -> AsyncIterator[str]:
-        m = model or self.config.default_model
+        model_name = model or self.config.default_model
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             async with client.stream(
                 "POST",
                 f"{self.config.base_url}/chat/completions",
                 json={
-                    "model": m,
-                    "messages": [m.dict() for m in messages],
+                    "model": model_name,
+                    "messages": [msg.model_dump() for msg in messages],
                     "stream": True,
                 },
                 headers={"Authorization": f"Bearer {self.config.api_key}"},

@@ -1,15 +1,16 @@
-import { Settings, Trash2, MessageSquare, Globe, Activity, Zap, Bot } from 'lucide-react';
+import { Settings, Trash2, MessageSquare, Globe, Activity, Zap, Bot, MessageCircle } from 'lucide-react';
 
-type ActivePanel = 'chat' | 'workspace' | 'agents';
+type ActivePanel = 'chat' | 'workspace' | 'agents' | 'training';
 
 interface SidebarProps {
   status: string;
   onClear: () => void;
   activePanel: ActivePanel;
   onPanelChange: (panel: ActivePanel) => void;
+  onToggleConversationSidebar?: () => void;
 }
 
-export default function Sidebar({ status, onClear, activePanel, onPanelChange }: SidebarProps) {
+export default function Sidebar({ status, onClear, activePanel, onPanelChange, onToggleConversationSidebar }: SidebarProps) {
   return (
     <div className="w-64 border-r flex flex-col" style={{ backgroundColor: 'var(--color-panel)', borderColor: 'var(--color-border)' }}>
       {/* Logo / Brand */}
@@ -86,6 +87,18 @@ export default function Sidebar({ status, onClear, activePanel, onPanelChange }:
 
       {/* Actions */}
       <div className="px-3 py-4 border-t space-y-2" style={{ borderColor: 'var(--color-border)' }}>
+        {/* Conversations Toggle */}
+        {onToggleConversationSidebar && (
+          <button
+            onClick={onToggleConversationSidebar}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:opacity-80"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span className="font-medium">Conversations</span>
+          </button>
+        )}
+
         <button
           onClick={onClear}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:opacity-80"

@@ -72,7 +72,7 @@ class MiniMaxProvider(BaseProvider):
                 f"{self.config.base_url}/chat/completions",
                 json={
                     "model": m,
-                    "messages": [msg.dict() for msg in messages],
+                    "messages": [msg.model_dump() for msg in messages],
                     "max_tokens": max_tokens,
                     "temperature": temperature,
                 },
@@ -113,7 +113,7 @@ class MiniMaxProvider(BaseProvider):
                 f"{self.config.base_url}/chat/completions",
                 json={
                     "model": m,
-                    "messages": [msg.dict() for msg in messages],
+                    "messages": [msg.model_dump() for msg in messages],
                     "stream": True,
                 },
                 headers=headers,

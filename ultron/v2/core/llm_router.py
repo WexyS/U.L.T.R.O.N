@@ -730,15 +730,27 @@ class LLMRouter:
                 available = provider.is_configured() if hasattr(provider, 'is_configured') else provider.is_available()
                 # Defansif: provider.get_model_name() yoksa fallback kullan
                 model_name = provider.get_model_name() if hasattr(provider, 'get_model_name') else getattr(provider.config, 'default_model', 'unknown')
-                result[name] = {
-                    "available": available,
-                    "model": model_name,
-                    "stats": {
+                
+                # Defansif: stats attribute kontrolü
+                if hasattr(provider, 'stats') and provider.stats:
+                    stats_data = {
                         "total_calls": provider.stats.total_calls,
                         "success_rate": f"{provider.stats.success_rate:.1%}",
                         "avg_latency_ms": f"{provider.stats.avg_latency_ms:.0f}ms",
                         "health_score": f"{provider.stats.health_score:.2f}",
                     }
+                else:
+                    stats_data = {
+                        "total_calls": 0,
+                        "success_rate": "N/A",
+                        "avg_latency_ms": "N/A",
+                        "health_score": "N/A",
+                    }
+                
+                result[name] = {
+                    "available": available,
+                    "model": model_name,
+                    "stats": stats_data,
                 }
         return result
 

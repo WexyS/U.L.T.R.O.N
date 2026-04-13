@@ -207,7 +207,7 @@ class FilesAgent(Agent):
 
     async def execute(self, task: Task) -> TaskResult:
         """Execute a file-related task routed by intent."""
-        self.state.status = "busy"  # type: ignore[assignment]
+        self.state.status = AgentStatus.BUSY
         intent = task.intent.lower().strip()
         context = task.context
 
@@ -249,7 +249,7 @@ class FilesAgent(Agent):
                 metadata={"intent": intent},
             )
         finally:
-            self.state.status = "idle"  # type: ignore[assignment]
+            self.state.status = AgentStatus.IDLE
 
     # ── intent handlers ────────────────────────────────────────────────
 

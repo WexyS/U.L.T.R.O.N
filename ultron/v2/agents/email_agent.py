@@ -46,7 +46,7 @@ class EmailAgent(Agent):
 
     async def execute(self, task: Task) -> TaskResult:
         """Execute an email-related task."""
-        self.state.status = "busy"  # type: ignore[assignment]
+        self.state.status = AgentStatus.BUSY
         try:
             intent = task.intent.lower().strip()
             if intent in ("send", "compose"):
@@ -68,7 +68,7 @@ class EmailAgent(Agent):
                 error=str(exc),
             )
         finally:
-            self.state.status = "idle"  # type: ignore[assignment]
+            self.state.status = AgentStatus.IDLE
 
     async def _handle_send(self, task: Task) -> TaskResult:
         """Send an email."""

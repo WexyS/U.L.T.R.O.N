@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 import httpx
 

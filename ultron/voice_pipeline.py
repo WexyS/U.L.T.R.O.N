@@ -290,6 +290,24 @@ TOOL_DECLARATIONS = [
             "required": ["topic"]
         }
     },
+    {
+        "name": "clone_website",
+        "description": "Verilen URL'deki web sitesini klonlar, UI bilesenlerini cikarir (Workspace sistemini kullanir). Kullanici bir siteyi kopyalamak veya klonlamak istediginde cagir.",
+        "parameters": {
+            "type": "object",
+            "properties": {"url": {"type": "string", "description": "Klonlanacak sitenin URL'si (orn: https://example.com)"}},
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "generate_app",
+        "description": "Kullanicinin verdigi fikre gore sifirdan bir uygulama/web sitesi uretir (Workspace sistemini kullanir).",
+        "parameters": {
+            "type": "object",
+            "properties": {"idea": {"type": "string", "description": "Uygulama fikri (orn: karanlik modlu todo list)"}},
+            "required": ["idea"]
+        }
+    },
 ]
 
 # Kesfedilen skill'leri arac olarak ekle
@@ -498,7 +516,7 @@ class SileroVAD:
 class EdgeTTS:
     """edge-tts ile metin-okuma. Pygame ile ses calma, barge-in destekli."""
 
-    def __init__(self, voice: str = TTS_VOICE):
+    def __init__(self, voice: str = "en-US-JennyNeural"):
         self.voice = voice
         self._stop_event = threading.Event()
         self._playing = False
@@ -832,6 +850,8 @@ class VoicePipeline:
             "computer_settings": self._tool_computer_settings,
             "ask_architect": self._tool_ask_architect,
             "deep_research": self._tool_deep_research,
+            "clone_website": self._tool_clone_website,
+            "generate_app": self._tool_generate_app,
         }
 
     def _tool_open_app(self, args: dict) -> str:
@@ -1009,6 +1029,32 @@ class VoicePipeline:
             return research_run(parameters=args)
         except Exception as e:
             return f"Derin arastirma hatasi: {e}"
+
+    def _tool_clone_website(self, args: dict) -> str:
+        """Workspace API uzerinden site klonlar."""
+        url = args.get("url", "").strip()
+        if not url:
+            return "URL belirtilmedi."
+        try:
+            response = requests.post("http://localhost:8000/api/v2/workspace/clone", json={"url": url, "extract_components": True}, timeout=60)
+            if response.status_code == 200:
+                return f"{url} basariyla klonlandi ve bilesenlerine ayrildi."
+            return f"Klonlama basarisiz: {response.text}"
+        except Exception as e:
+            return f"Klonlama sirasinda Workspace API hatasi: {e}"
+
+    def _tool_generate_app(self, args: dict) -> str:
+        """Workspace API uzerinden uygulama uretir."""
+        idea = args.get("idea", "").strip()
+        if not idea:
+            return "Fikir belirtilmedi."
+        try:
+            response = requests.post("http://localhost:8000/api/v2/workspace/generate", json={"idea": idea, "tech_stack": "html-css-js"}, timeout=120)
+            if response.status_code == 200:
+                return f"Uygulama basariyla uretildi: {idea}. Ayrintilar workspace dizininde."
+            return f"Uretim basarisiz: {response.text}"
+        except Exception as e:
+            return f"Uretim sirasinda Workspace API hatasi: {e}"
 
     def _make_skill_handler(self, skill: dict):
         """Skill icin dinamik handler olustur."""

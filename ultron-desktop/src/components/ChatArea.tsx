@@ -1,5 +1,9 @@
-import { useRef, useEffect, useState } from 'react';
-import { User, Bot, Volume2, VolumeX } from 'lucide-react';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  User, Bot, Volume2, VolumeX, Copy, Check, RotateCcw, 
+  Edit2, Share2, ThumbsUp, ThumbsDown, Clock, Zap 
+} from 'lucide-react';
 import StreamingMessage from './StreamingMessage';
 import type { ChatMessage } from '../hooks/useUltron';
 
@@ -7,13 +11,25 @@ interface ChatAreaProps {
   messages: ChatMessage[];
   currentResponse: string;
   isStreaming: boolean;
+  isProcessing?: boolean;
+  model?: string;
+  latency?: number;
 }
 
-export default function ChatArea({ messages, currentResponse, isStreaming }: ChatAreaProps) {
+export default function ChatArea({ 
+  messages, 
+  currentResponse, 
+  isStreaming,
+  isProcessing = false,
+  model = 'Ollama',
+  latency = 0
+}: ChatAreaProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [speakingId, setSpeakingId] = useState<number | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [feedbackGiven, setFeedbackGiven] = useState<{[key: number]: 'up' | 'down' | null}>({});
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -23,14 +39,18 @@ export default function ChatArea({ messages, currentResponse, isStreaming }: Cha
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
-      audioElement?.pause();
+      if (audioElement) {
+        audioElement.pause();
+        URL.revokeObjectURL(audioElement.src);
+      }
     };
-  }, [audioElement]);
+  }, []);
 
   const speakMessage = async (text: string, idx: number) => {
     // Stop current speech
     if (audioElement) {
       audioElement.pause();
+      URL.revokeObjectURL(audioElement.src);
       setAudioElement(null);
       setSpeakingId(null);
       return;
@@ -66,101 +86,376 @@ export default function ChatArea({ messages, currentResponse, isStreaming }: Cha
     }
   };
 
-  return (
-    <div 
-      ref={chatContainerRef}
-      className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth"
-    >
-      {messages.length === 0 && !currentResponse ? (
-        <div className="flex flex-col items-center justify-center h-full text-center">
-          <div className="relative mb-6">
-            <div className="w-24 h-24 rounded-full border-2 border-ultron-primary/30 flex items-center justify-center animate-pulse-slow">
-              <div className="w-16 h-16 rounded-full bg-ultron-primary/10 flex items-center justify-center">
-                <Bot className="w-8 h-8 text-ultron-primary" />
-              </div>
-            </div>
-            <div className="absolute -inset-2 rounded-full border border-ultron-primary/20 animate-spin-slow" />
-          </div>
-          <h2 className="text-2xl font-semibold mb-2" style={{ color: 'var(--color-text)' }}>Ultron v2.0</h2>
-          <p className="max-w-md" style={{ color: 'var(--color-text-secondary)' }}>
-            Your personal AI assistant is ready. Ask me anything, write code, conduct research, or control your system.
-          </p>
-          <div className="mt-8 grid grid-cols-2 gap-3 text-sm">
-            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-              💬 General chat & questions
-            </div>
-            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-              💻 Code generation & debugging
-            </div>
-            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-              🔍 Deep research & analysis
-            </div>
-            <div className="p-3 rounded-lg border text-sm" style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-              🖥️ System control & RPA
-            </div>
-          </div>
-        </div>
-      ) : (
-        <>
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
-            >
-              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                msg.role === 'user' 
-                  ? 'bg-ultron-primary/20 border border-ultron-primary/50' 
-                  : 'bg-ultron-accent/10 border border-ultron-accent/50'
-              }`}>
-                {msg.role === 'user' ? (
-                  <User className="w-4 h-4 text-ultron-primary" />
-                ) : (
-                  <Bot className="w-4 h-4 text-ultron-accent" />
-                )}
-              </div>
-              
-              <div className={`flex-1 max-w-3xl ${msg.role === 'user' ? 'text-right' : ''}`}>
-                {msg.role === 'user' ? (
-                  <div className="inline-block px-4 py-3 rounded-2xl bg-ultron-panel border border-ultron-border text-left">
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-                ) : (
-                  <div className="text-left flex items-start gap-2">
-                    <div className="flex-1">
-                      <StreamingMessage content={msg.content} />
-                    </div>
-                    <button
-                      onClick={() => speakMessage(msg.content, idx)}
-                      className={`flex-shrink-0 p-1.5 rounded-md transition-colors mt-1 ${
-                        speakingId === idx
-                          ? 'bg-ultron-primary/20 text-ultron-primary'
-                          : 'text-ultron-textMuted hover:text-ultron-primary hover:bg-ultron-card'
-                      }`}
-                      title={speakingId === idx ? 'Stop speaking' : 'Speak this message'}
-                    >
-                      {speakingId === idx ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+  const copyMessage = useCallback(async (content: string, idx: number) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedId(idx);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+  }, []);
 
-          {/* Streaming response */}
-          {currentResponse && (
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-ultron-accent/10 border border-ultron-accent/50 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-ultron-accent" />
-              </div>
-              <div className="flex-1 max-w-3xl">
-                <StreamingMessage content={currentResponse} isStreaming={isStreaming} />
-              </div>
+  const handleFeedback = useCallback((idx: number, type: 'up' | 'down') => {
+    setFeedbackGiven(prev => ({ ...prev, [idx]: type }));
+  }, []);
+
+  const formatTimestamp = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div
+      ref={chatContainerRef}
+      className="flex-1 overflow-y-auto scroll-smooth"
+      style={{ backgroundColor: 'var(--color-bg)' }}
+    >
+      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+        {messages.length === 0 && !currentResponse ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col items-center justify-center min-h-[60vh] text-center"
+          >
+            {/* Enhanced Welcome Screen */}
+            <div className="relative mb-8">
+              <motion.div 
+                className="w-32 h-32 rounded-3xl flex items-center justify-center"
+                style={{ 
+                  background: 'linear-gradient(135deg, var(--color-accent), #4f46e5)',
+                  boxShadow: '0 20px 60px rgba(99, 102, 241, 0.3)'
+                }}
+                animate={{ 
+                  scale: [1, 1.05, 1],
+                  rotate: [0, 2, -2, 0]
+                }}
+                transition={{ 
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+              >
+                <Bot className="w-16 h-16 text-white" strokeWidth={1.5} />
+              </motion.div>
+              {/* Animated rings */}
+              <motion.div
+                className="absolute -inset-4 rounded-3xl border-2 border-ultron-primary/20"
+                animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.2, 0.5] }}
+                transition={{ duration: 3, repeat: Infinity }}
+              />
+              <motion.div
+                className="absolute -inset-8 rounded-3xl border border-ultron-primary/10"
+                animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.1, 0.3] }}
+                transition={{ duration: 3, repeat: Infinity, delay: 0.5 }}
+              />
             </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </>
-      )}
+
+            <motion.h2 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-4xl font-bold mb-3"
+              style={{ 
+                background: 'linear-gradient(135deg, var(--color-text), var(--color-accent))',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}
+            >
+              Ultron v2.1
+            </motion.h2>
+            <motion.p 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="max-w-lg text-lg mb-8"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              Your advanced multi-agent AI assistant. Ask questions, write code, conduct research, and automate tasks.
+            </motion.p>
+
+            {/* Capability Cards */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-2xl"
+            >
+              {[
+                { icon: '💬', title: 'Chat', desc: 'Natural conversation' },
+                { icon: '💻', title: 'Code', desc: 'Write & debug' },
+                { icon: '🔍', title: 'Research', desc: 'Deep analysis' },
+                { icon: '🤖', title: 'Agents', desc: 'Multi-agent tasks' },
+              ].map((item, i) => (
+                <motion.div
+                  key={item.title}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4 + i * 0.1 }}
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  className="p-4 rounded-xl border cursor-pointer transition-all"
+                  style={{ 
+                    backgroundColor: 'var(--color-card)', 
+                    borderColor: 'var(--color-border)'
+                  }}
+                >
+                  <div className="text-2xl mb-2">{item.icon}</div>
+                  <div className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>{item.title}</div>
+                  <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{item.desc}</div>
+                </motion.div>
+              ))}
+            </motion.div>
+
+            {/* Model Info */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="mt-12 flex items-center gap-2 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              <Zap className="w-3 h-3" />
+              <span>Powered by {model}</span>
+              <span>•</span>
+              <span>Latency: {latency}ms</span>
+            </motion.div>
+          </motion.div>
+        ) : (
+          <>
+            {/* Messages List */}
+            <AnimatePresence initial={false}>
+              {messages.map((msg, idx) => (
+                <motion.div
+                  key={msg.id || `msg-${idx}-${msg.timestamp}`}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="group relative"
+                >
+                  <div className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {/* Assistant Avatar */}
+                    {msg.role === 'assistant' && (
+                      <div className="flex-shrink-0">
+                        <div 
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ background: 'linear-gradient(135deg, var(--color-accent), #4f46e5)' }}
+                        >
+                          <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message Content */}
+                    <div className={`flex-1 max-w-3xl ${msg.role === 'user' ? 'order-1' : ''}`}>
+                      <div
+                        className={`rounded-2xl px-5 py-3.5 ${
+                          msg.role === 'user'
+                            ? 'rounded-br-md'
+                            : 'rounded-bl-md'
+                        }`}
+                        style={{
+                          backgroundColor: msg.role === 'user' 
+                            ? 'var(--color-accent)' 
+                            : 'var(--color-card)',
+                          border: `1px solid ${msg.role === 'user' ? 'transparent' : 'var(--color-border)'}`
+                        }}
+                      >
+                        <div className="prose prose-sm max-w-none" style={{ 
+                          color: msg.role === 'user' ? 'white' : 'var(--color-text)'
+                        }}>
+                          {msg.role === 'user' ? (
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                          ) : (
+                            <StreamingMessage content={msg.content} />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Message Actions */}
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className={`flex items-center gap-2 mt-2 ${
+                          msg.role === 'user' ? 'justify-end' : 'justify-start'
+                        } opacity-0 group-hover:opacity-100 transition-opacity`}
+                      >
+                        {/* Timestamp */}
+                        <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                          <Clock className="w-3 h-3" />
+                          <span>{formatTimestamp(msg.timestamp)}</span>
+                        </div>
+
+                        {msg.role === 'assistant' && (
+                          <>
+                            {/* Copy Button */}
+                            <button
+                              onClick={() => copyMessage(msg.content, idx)}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              title="Copy message"
+                            >
+                              {copiedId === idx ? (
+                                <Check className="w-3.5 h-3.5 text-green-500" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
+                              )}
+                            </button>
+
+                            {/* Regenerate Button */}
+                            <button
+                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              title="Regenerate response"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
+                            </button>
+
+                            {/* TTS Button */}
+                            <button
+                              onClick={() => speakMessage(msg.content, idx)}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              title={speakingId === idx ? 'Stop speaking' : 'Speak message'}
+                            >
+                              {speakingId === idx ? (
+                                <VolumeX className="w-3.5 h-3.5 text-ultron-primary" />
+                              ) : (
+                                <Volume2 className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
+                              )}
+                            </button>
+
+                            {/* Feedback Buttons */}
+                            <div className="flex gap-1 ml-2">
+                              <button
+                                onClick={() => handleFeedback(idx, 'up')}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  feedbackGiven[idx] === 'up' 
+                                    ? 'bg-green-100 dark:bg-green-900/30' 
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                }`}
+                                title="Helpful"
+                              >
+                                <ThumbsUp className={`w-3.5 h-3.5 ${
+                                  feedbackGiven[idx] === 'up' ? 'text-green-500' : ''
+                                }`} style={{ color: feedbackGiven[idx] === 'up' ? undefined : 'var(--color-text-muted)' }} />
+                              </button>
+                              <button
+                                onClick={() => handleFeedback(idx, 'down')}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  feedbackGiven[idx] === 'down' 
+                                    ? 'bg-red-100 dark:bg-red-900/30' 
+                                    : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                                }`}
+                                title="Not helpful"
+                              >
+                                <ThumbsDown className={`w-3.5 h-3.5 ${
+                                  feedbackGiven[idx] === 'down' ? 'text-red-500' : ''
+                                }`} style={{ color: feedbackGiven[idx] === 'down' ? undefined : 'var(--color-text-muted)' }} />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </motion.div>
+                    </div>
+
+                    {/* User Avatar */}
+                    {msg.role === 'user' && (
+                      <div className="flex-shrink-0">
+                        <div 
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                        >
+                          <User className="w-5 h-5 text-white" strokeWidth={1.5} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* Streaming Response */}
+            {isStreaming && currentResponse && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex gap-4"
+              >
+                <div 
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--color-accent), #4f46e5)' }}
+                >
+                  <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 max-w-3xl">
+                  <div
+                    className="rounded-2xl rounded-bl-md px-5 py-3.5"
+                    style={{ 
+                      backgroundColor: 'var(--color-card)',
+                      border: '1px solid var(--color-border)'
+                    }}
+                  >
+                    <div className="prose prose-sm max-w-none" style={{ color: 'var(--color-text)' }}>
+                      <StreamingMessage content={currentResponse} isStreaming={true} />
+                    </div>
+                  </div>
+                  {/* Streaming indicator */}
+                  <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    <motion.div
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="w-2 h-2 rounded-full bg-ultron-primary"
+                    />
+                    <span>Ultron is thinking...</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Processing Indicator (no tokens yet) */}
+            {isProcessing && !currentResponse && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex gap-4"
+              >
+                <div 
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--color-accent), #4f46e5)' }}
+                >
+                  <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 max-w-3xl">
+                  <div
+                    className="rounded-2xl rounded-bl-md px-5 py-6"
+                    style={{ 
+                      backgroundColor: 'var(--color-card)',
+                      border: '1px solid var(--color-border)'
+                    }}
+                  >
+                    {/* Typing animation */}
+                    <div className="flex items-center gap-1.5">
+                      {[0, 1, 2].map(i => (
+                        <motion.div
+                          key={i}
+                          className="w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: 'var(--color-accent)' }}
+                          animate={{ y: [0, -8, 0] }}
+                          transition={{ 
+                            duration: 0.6, 
+                            repeat: Infinity, 
+                            delay: i * 0.15,
+                            ease: "easeInOut"
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   );
 }

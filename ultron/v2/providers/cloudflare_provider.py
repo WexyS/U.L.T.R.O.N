@@ -39,7 +39,7 @@ class CloudflareProvider(BaseProvider):
             resp = await client.post(
                 f"{self.config.base_url}/{m}",
                 json={
-                    "messages": [m.dict() for m in messages],
+                    "messages": [m.model_dump() for m in messages],
                     "max_tokens": max_tokens,
                 },
                 headers={"Authorization": f"Bearer {self.config.api_key}"},

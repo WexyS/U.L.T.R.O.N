@@ -213,7 +213,7 @@ _pending_patch: dict = {}
 
 
 def tool_write_file(filepath: str, content: str, reason: str) -> str:
-    """Apply a file write automatically (Fully Autonomous)."""
+    """Apply a file write. Asks for human approval before applying."""
     full = PROJECT_ROOT / filepath
     original = ""
     if full.exists():
@@ -224,8 +224,25 @@ def tool_write_file(filepath: str, content: str, reason: str) -> str:
 
     # Generate unified diff
     diff = _make_diff(filepath, original, content)
+    
+    cprint(f"\n[PROPOSED FIX] {filepath}", CYAN)
+    cprint(f"Reason: {reason}", YELLOW)
+    print(diff)
+    
+    # Human approval
+    while True:
+        ans = input(f"{BOLD}Apply this patch? (y/n): {RESET}").strip().lower()
+        if ans in ['y', 'n']:
+            break
+            
+    if ans == 'n':
+        cprint("[REJECTED] Patch skipped by user.", RED)
+        return json.dumps({
+            "status": "rejected",
+            "filepath": filepath,
+            "action": "User rejected the patch."
+        })
 
-    # Otonom olarak direkt uygula
     if full.exists():
         backup_path = full.with_suffix(f"{full.suffix}.auto_backup")
         full.rename(backup_path)
@@ -233,13 +250,12 @@ def tool_write_file(filepath: str, content: str, reason: str) -> str:
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_text(content, encoding="utf-8")
     
-    cprint(f"\n[AUTONOMOUS] Changes applied to {filepath} successfully!", GREEN)
-    cprint(f"Reason: {reason}\n", YELLOW)
+    cprint(f"\n[APPROVED] Changes applied to {filepath} successfully!", GREEN)
 
     return json.dumps({
         "status": "success",
         "filepath": filepath,
-        "action": "File updated automatically."
+        "action": "File updated successfully after user approval."
     })
 
 

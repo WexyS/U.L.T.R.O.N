@@ -218,7 +218,7 @@ async def clone_site(req: CloneRequest, request: Request):
     try:
         mgr = await get_workspace_mgr()
         item = await mgr.clone_site(req)
-        return {"success": True, "item": item.dict()}
+        return {"success": True, "item": item.model_dump()}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -230,7 +230,7 @@ async def generate_app(req: GenerateRequest, request: Request):
     try:
         mgr = await get_workspace_mgr()
         item = await mgr.generate_app(req)
-        return {"success": True, "item": item.dict()}
+        return {"success": True, "item": item.model_dump()}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -242,7 +242,7 @@ async def synthesize(req: SynthesizeRequest, request: Request):
     try:
         mgr = await get_workspace_mgr()
         item = await mgr.synthesize(req)
-        return {"success": True, "item": item.dict()}
+        return {"success": True, "item": item.model_dump()}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -251,7 +251,7 @@ async def synthesize(req: SynthesizeRequest, request: Request):
 async def list_workspace():
     mgr = await get_workspace_mgr()
     items = await mgr.list_workspace()
-    return {"items": [i.dict() for i in items]}
+    return {"items": [i.model_dump() for i in items]}
 
 
 @app.get("/api/v2/workspace/search")

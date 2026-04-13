@@ -115,16 +115,30 @@ class MemoryEngine:
         - Background worker batch olarak işler
         """
         # Async task oluştur
-        task = asyncio.create_task(
-            self._async_store(entry_id, content, entry_type, metadata),
-            name=f"store_{entry_id}"
-        )
-        self._background_tasks.append(task)
-        
-        # Task tamamlandıktan sonra listeden çıkar
-        task.add_done_callback(lambda t: self._background_tasks.remove(t) if t in self._background_tasks else None)
-        
-        logger.debug("Memory store task queued: %s (%s)", entry_id, entry_type)
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                self._async_store(entry_id, content, entry_type, metadata),
+                name=f"store_{entry_id}"
+            )
+            self._background_tasks.append(task)
+            task.add_done_callback(
+                lambda t: self._background_tasks.remove(t) if t in self._background_tasks else None
+            )
+            logger.debug("Memory store task queued: %s (%s)", entry_id, entry_type)
+        except RuntimeError:
+            # No running event loop â store synchronously as fallback
+            try:
+                embedding = self._get_embedding(content)
+                self._chroma_collection.upsert(
+                    ids=[entry_id],
+                    embeddings=[embedding],
+                    documents=[content],
+                    metadatas=[{"type": entry_type, **(metadata or {})}],
+                )
+                logger.debug("Memory stored (sync fallback): %s (%s)", entry_id, entry_type)
+            except Exception as e:
+                logger.error("Failed to store memory (sync fallback): %s", e)
     
     async def _async_store(
         self,

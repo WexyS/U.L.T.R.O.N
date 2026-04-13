@@ -39,6 +39,8 @@ logger = logging.getLogger("AI.Bridge")
 
 def notify_user(title: str, message: str):
     """Kullanıcıya anlık Windows masaüstü bildirimi (Toast) gönderir."""
+    if sys.platform != "win32":
+        return
     try:
         import subprocess
         safe_title = title.replace('"', "'").replace('\n', ' ')

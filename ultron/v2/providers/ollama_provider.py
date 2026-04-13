@@ -34,15 +34,15 @@ class OllamaProvider(BaseProvider):
         max_tokens: int = 2048,
         temperature: float = 0.7,
     ) -> ProviderResult:
-        m = model or self.config.default_model
+        model_name = model or self.config.default_model
         start = time.time()
 
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             resp = await client.post(
                 f"{self.config.base_url}/api/chat",
                 json={
-                    "model": m,
-                    "messages": [m.dict() for m in messages],
+                    "model": model_name,
+                    "messages": [msg.model_dump() for msg in messages],
                     "stream": False,
                     "options": {
                         "num_predict": max_tokens,
@@ -57,7 +57,7 @@ class OllamaProvider(BaseProvider):
         return ProviderResult(
             content=content,
             provider=self.config.name,
-            model=m,
+            model=model_name,
             tokens_used=data.get("eval_count", 0) + data.get("prompt_eval_count", 0),
             latency_ms=int((time.time() - start) * 1000),
         )
@@ -67,14 +67,14 @@ class OllamaProvider(BaseProvider):
         messages: list[Message],
         model: Optional[str] = None,
     ) -> AsyncIterator[str]:
-        m = model or self.config.default_model
+        model_name = model or self.config.default_model
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             async with client.stream(
                 "POST",
                 f"{self.config.base_url}/api/chat",
                 json={
-                    "model": m,
-                    "messages": [m.dict() for m in messages],
+                    "model": model_name,
+                    "messages": [msg.model_dump() for msg in messages],
                     "stream": True,
                 },
             ) as resp:
