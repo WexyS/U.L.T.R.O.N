@@ -45,8 +45,8 @@ export function useUltron({
     const pollAll = async () => {
       try {
         const [statusRes, providersRes, workspaceRes] = await Promise.all([
-          fetch(`${apiUrl}/status`).then(r => r.ok ? r.json() : null),
-          fetch(`${apiUrl}/providers`).then(r => r.ok ? r.json() : null),
+          fetch(`${apiUrl}/api/v2/status`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${apiUrl}/api/v2/providers`).then(r => r.ok ? r.json() : null).catch(() => null),
           fetch(`${apiUrl}/api/v2/workspace/list`).then(r => r.ok ? r.json() : null).catch(() => null),
         ]);
         if (statusRes) setStatus(statusRes);
@@ -63,38 +63,44 @@ export function useUltron({
   }, [apiUrl]);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN || 
+        wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     try {
+      console.log('[Ultron] Attempting WebSocket connection to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[Ultron] WebSocket connected');
+        console.log('[Ultron] WebSocket connected successfully');
         setIsConnected(true);
         reconnectAttempts.current = 0;
         setError(null);
       };
 
-      ws.onclose = () => {
-        console.log('[Ultron] WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('[Ultron] WebSocket disconnected, code:', event.code, 'reason:', event.reason);
         setIsConnected(false);
         setIsStreaming(false);
+        setCurrentResponse('');
+        responseBuffer.current = '';
 
         if (reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = Math.min(reconnectInterval * Math.pow(1.5, reconnectAttempts.current), 30000);
+          console.log(`[Ultron] Reconnecting in ${delay}ms... (${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
           reconnectTimeout.current = setTimeout(() => {
             reconnectAttempts.current++;
-            console.log(`[Ultron] Reconnecting... (${reconnectAttempts.current}/${maxReconnectAttempts})`);
             connect();
-          }, reconnectInterval);
+          }, delay);
         } else {
-          setError('Connection lost. Please check if the backend is running.');
+          setError('Connection lost. Please ensure the backend is running on port 8000.');
+          console.error('[Ultron] Max reconnection attempts reached');
         }
       };
 
-      ws.onerror = () => {
-        console.error('[Ultron] WebSocket error');
-        setError('WebSocket error occurred');
+      ws.onerror = (event) => {
+        console.error('[Ultron] WebSocket error:', event);
+        setError('WebSocket connection failed. Is the backend running on http://localhost:8000?');
       };
 
       ws.onmessage = (event) => {

@@ -16,16 +16,29 @@ _active_tasks: Set[asyncio.Task] = set()
 @router.websocket("/ws/chat")
 async def chat_ws(ws: WebSocket):
     from ultron.api.main import get_orchestrator
+    
+    # Set longer timeout for WebSocket
     await ws.accept()
     conn_id = f"chat-{uuid.uuid4().hex[:8]}"
+    logger.info("[%s] WebSocket connected", conn_id)
+    
     await ws_manager.connect(conn_id, ws)
 
     try:
         while True:
-            data = await ws.receive_json()
+            try:
+                # Add timeout to receive
+                data = await asyncio.wait_for(ws.receive_json(), timeout=300)  # 5 minute timeout
+            except asyncio.TimeoutError:
+                logger.info("[%s] Receive timeout, closing connection", conn_id)
+                break
+            except Exception as e:
+                logger.warning("[%s] Receive error: %s", conn_id, e)
+                break
+                
             message = data.get("message", "").strip()
             mode = data.get("mode", "chat")
-            
+
             if not message:
                 await ws_manager.send_json(conn_id, {"type": "error", "content": "Empty message"})
                 continue
@@ -80,12 +93,16 @@ async def chat_ws(ws: WebSocket):
             task.add_done_callback(_active_tasks.discard)
 
     except WebSocketDisconnect:
-        logger.info("[%s] Disconnected", conn_id)
+        logger.info("[%s] Client disconnected", conn_id)
     except Exception as e:
-        logger.error("[%s] Fatal error: %s", conn_id, e)
+        logger.error("[%s] Fatal error: %s", conn_id, e, exc_info=True)
     finally:
         # Cancel all active tasks on disconnect
-        for task in _active_tasks:
-            task.cancel()
+        for task in list(_active_tasks):
+            try:
+                task.cancel()
+            except Exception:
+                pass
         _active_tasks.clear()
         await ws_manager.disconnect(conn_id)
+        logger.info("[%s] Connection cleanup complete", conn_id)
