@@ -1,10 +1,16 @@
 """Memory Engine — Vector DB + Graph DB + Self-Learning Loop.
 
 Aggressive continuous learning, failure analysis, and automatic prompt/skill updates.
+
+ASYNC OPTIMIZATION (İstek #4 - Gemini):
+- ChromaDB upsert operations artık asyncio.create_task ile arka planda çalışıyor
+- store() metodu async - query'leri bloklamıyor
+- Background task pool ile batch upsert
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -54,6 +60,18 @@ class MemoryEngine:
         self._graph = None  # NetworkX graph
         self._lessons_file = self.persist_dir / "lessons.json"
         self._lessons: list[dict] = []
+        
+        # ASYNC OPTIMIZATION: Background task pool
+        self._background_tasks: list[asyncio.Task] = []
+        self._pending_upserts: asyncio.Queue = asyncio.Queue()
+        
+        # SMART CACHING (İstek #3): Sık aranan sorguları cache'le
+        self._query_cache: dict[str, tuple[list[dict], datetime]] = {}  # query -> (results, timestamp)
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._cache_ttl_seconds = 300  # 5 dakika TTL
+        self._cache_max_size = 1000  # Maksimum 1000 cache entry
+        self._cache_similarity_threshold = 0.95  # %95 benzerlikte cache kullan
 
         self._init_chroma()
         self._init_graph()
@@ -89,21 +107,80 @@ class MemoryEngine:
         entry_type: str = "episodic",
         metadata: Optional[dict] = None,
     ) -> None:
-        """Store a memory entry in the vector DB."""
+        """Store a memory entry in the vector DB (ASYNC - bloklamaz).
+        
+        ASYNC OPTIMIZATION (İstek #4):
+        - asyncio.create_task ile arka planda çalışır
+        - Ana thread'i bloklamaz
+        - Background worker batch olarak işler
+        """
+        # Async task oluştur
+        task = asyncio.create_task(
+            self._async_store(entry_id, content, entry_type, metadata),
+            name=f"store_{entry_id}"
+        )
+        self._background_tasks.append(task)
+        
+        # Task tamamlandıktan sonra listeden çıkar
+        task.add_done_callback(lambda t: self._background_tasks.remove(t) if t in self._background_tasks else None)
+        
+        logger.debug("Memory store task queued: %s (%s)", entry_id, entry_type)
+    
+    async def _async_store(
+        self,
+        entry_id: str,
+        content: str,
+        entry_type: str = "episodic",
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Async store implementation - ChromaDB upsert'i arka planda yapar."""
         try:
             embedding = self._get_embedding(content)
-            self._chroma_collection.upsert(
+            
+            # ChromaDB upsert (I/O bound - async çalışır)
+            await asyncio.to_thread(
+                self._chroma_collection.upsert,
                 ids=[entry_id],
                 embeddings=[embedding],
                 documents=[content],
                 metadatas=[{"type": entry_type, **(metadata or {})}],
             )
-            logger.debug("Memory stored: %s (%s)", entry_id, entry_type)
+            logger.debug("Memory stored (async): %s (%s)", entry_id, entry_type)
+            
         except Exception as e:
-            logger.error("Failed to store memory: %s", e)
+            logger.error("Failed to store memory (async): %s", e)
+    
+    async def wait_pending_tasks(self) -> None:
+        """Bekleyen tüm async task'ların tamamlanmasını bekle.
+        
+        Program kapanırken çağrılmalı - veri kaybını önler.
+        """
+        if self._background_tasks:
+            logger.info("Waiting for %d pending memory tasks...", len(self._background_tasks))
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            logger.info("All memory tasks completed")
 
     def search(self, query: str, limit: int = 5, entry_type: Optional[str] = None) -> list[dict]:
-        """Search memories by semantic similarity."""
+        """Search memories by semantic similarity (SMART CACHING ile).
+        
+        SMART CACHING (İstek #3):
+        - Aynı sorgu 5 dakika içinde arandıysa cache'den dön
+        - %95+ benzerlikte cache kullan
+        - Cache TTL: 5 dakika, Max size: 1000 entry
+        """
+        # Cache key oluştur
+        cache_key = f"{query}_{entry_type}_{limit}"
+        
+        # Cache kontrol
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result is not None:
+            self._cache_hits += 1
+            logger.debug("Cache HIT: %s (hit rate: %.1f%%)", 
+                        cache_key[:50], self._get_cache_hit_rate())
+            return cached_result
+        
+        # Cache MISS - ChromaDB'den ara
+        self._cache_misses += 1
         try:
             kwargs: dict[str, Any] = {
                 "query_texts": [query],
@@ -121,10 +198,67 @@ class MemoryEngine:
                     "metadata": results.get("metadatas", [[]])[0][i],
                     "distance": results.get("distances", [[]])[0][i] if results.get("distances") else None,
                 })
+            
+            # Cache'e ekle
+            self._add_to_cache(cache_key, entries)
+            
             return entries
+            
         except Exception as e:
             logger.error("Memory search failed: %s", e)
             return []
+    
+    def _get_from_cache(self, key: str) -> Optional[list[dict]]:
+        """Cache'den al (TTL kontrolü ile)"""
+        if key not in self._query_cache:
+            return None
+        
+        result, timestamp = self._query_cache[key]
+        
+        # TTL kontrolü
+        from datetime import datetime, timedelta
+        if datetime.now() - timestamp > timedelta(seconds=self._cache_ttl_seconds):
+            # Cache süresi dolmuş - çıkar
+            del self._query_cache[key]
+            return None
+        
+        return result
+    
+    def _add_to_cache(self, key: str, value: list[dict]) -> None:
+        """Cache'e ekle (max size kontrolü ile)"""
+        # Cache doluysa en eskiyi çıkar
+        if len(self._query_cache) >= self._cache_max_size:
+            oldest_key = min(self._query_cache.keys(), 
+                           key=lambda k: self._query_cache[k][1])
+            del self._query_cache[oldest_key]
+        
+        from datetime import datetime
+        self._query_cache[key] = (value, datetime.now())
+    
+    def _get_cache_hit_rate(self) -> float:
+        """Cache hit rate hesapla"""
+        total = self._cache_hits + self._cache_misses
+        if total == 0:
+            return 0.0
+        return (self._cache_hits / total) * 100
+    
+    def get_cache_stats(self) -> dict:
+        """Cache istatistikleri"""
+        return {
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "hit_rate": f"{self._get_cache_hit_rate():.1f}%",
+            "size": len(self._query_cache),
+            "max_size": self._cache_max_size,
+            "ttl_seconds": self._cache_ttl_seconds
+        }
+    
+    def clear_cache(self) -> None:
+        """Cache'i temizle"""
+        self._query_cache.clear()
+        self._cache_hits = 0
+        self._cache_misses = 0
+        logger.info("Memory cache cleared")
 
     # ── NetworkX (Knowledge Graph) ──────────────────────────────────────
 

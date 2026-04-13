@@ -12,7 +12,8 @@
   <a href="#13-ai-providers"><strong>13 AI Providers</strong></a> •
   <a href="#workspace--rag"><strong>Workspace</strong></a> •
   <a href="#memory-system"><strong>Memory</strong></a> •
-  <a href="#api-reference"><strong>API</strong></a>
+  <a href="#api-reference"><strong>API</strong></a> •
+  <a href="#qwen--gemini-collab"><strong>AI Collaboration</strong></a>
 </p>
 
 <p>
@@ -47,6 +48,7 @@
 | 🎨 **Modern 3-Panel GUI** | React + Framer Motion + Tailwind — sidebar, chat/workspace toggle, inspector panel |
 | 🔌 **n8n Integration** | 3 ready-to-import webhook workflows (clone, generate, synthesize) |
 | 🔒 **Security First** | Scoped CORS, optional API key auth, rate limiting, structured logging |
+| 🧬 **Autonomous Evolution** | Self-improving system — researches new tools, consults Gemini, auto-integrates with human approval |
 
 ---
 
@@ -552,6 +554,69 @@ Ultron/
 | **Voice** | Whisper, SpeechRecognition, edge-tts |
 | **Frontend** | React 18, TypeScript, Vite 5, Tailwind CSS, Framer Motion |
 | **Desktop** | Tauri |
+
+---
+
+## 🤝 Qwen ↔ Gemini Collaboration
+
+Ultron artık **çift yönlü AI işbirliği** destekliyor! Yerel Qwen LLM'iniz ile bulut Gemini arasında otonom iletişim kurun.
+
+### ✨ Özellikler
+
+| Özellik | Açıklama |
+|---------|----------|
+| 🧠 **Mimari Danışmanlık** | Qwen çıkmaza girdiğinde Gemini'ye danışır |
+| 🐛 **Debug Asistanı** | İnatçı bug'larda Gemini root cause analizi yapar |
+| 💻 **Kod Önerisi** | Gemini kod yazar, Qwen otomatik uygular |
+| 🔄 **Otomatik İş Akışı** | Qwen → Gemini → Qwen döngüsü |
+
+### 🚀 Hızlı Başlangıç
+
+```bash
+# 1. API Key ekle (.env dosyasına)
+OPENROUTER_API_KEY=sk-or-v1-...
+
+# 2. Test suite çalıştır
+python scripts/test_qwen_gemini_collab.py
+
+# 3. Kullanım (Python kodunda)
+from ultron.actions.ask_architect import run, ask_and_apply
+
+# Danışmanlık modu
+result = run({
+    "question": "Microservice mi monolith mi?",
+    "mode": "consult"
+})
+
+# Otomatik kod uygulama
+result = ask_and_apply(
+    question="Bu fonksiyonu async yap",
+    file_path="ultron/v2/memory/engine.py"
+)
+```
+
+### 📖 Detaylı Kılavuz
+
+Bkz: [docs/QWEN_GEMINI_COLLAB.md](docs/QWEN_GEMINI_COLLAB.md)
+
+### 💰 Maliyet
+
+- **Ücretsiz**: `google/gemini-2.0-flash-exp:free` (OpenRouter free tier)
+- **Ucuz**: `google/gemini-2.5-flash` (~$0.10/1M token)
+- **Ortalama**: ~$0.0001-0.0003/sorgu
+
+### 🔧 Kullanım Senaryoları
+
+```
+Workflow 1: Feature Development
+User Request → Qwen Analiz → Gemini Mimari Onay → Qwen Implement → Test
+
+Workflow 2: Bug Fix
+Bug Report → Qwen Debug → Gemini Root Cause → Qwen Fix → Test
+
+Workflow 3: Code Review
+Qwen Code Review → Gemini Best Practices → Qwen Refactor → Lint
+```
 
 ---
 

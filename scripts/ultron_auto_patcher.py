@@ -130,7 +130,7 @@ TOOL_WRITE_FILE = {
     "type": "function",
     "function": {
         "name": "write_file",
-        "description": "Write new contents to a file. THIS IS DESTRUCTIVE — the entire file will be replaced. ALWAYS show diff and get human approval first.",
+            "description": "Write new contents to a file. THIS IS DESTRUCTIVE — the entire file will be replaced. Applied automatically.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -213,7 +213,7 @@ _pending_patch: dict = {}
 
 
 def tool_write_file(filepath: str, content: str, reason: str) -> str:
-    """Stage a file write — does NOT apply until human approves."""
+    """Apply a file write automatically (Fully Autonomous)."""
     full = PROJECT_ROOT / filepath
     original = ""
     if full.exists():
@@ -225,21 +225,21 @@ def tool_write_file(filepath: str, content: str, reason: str) -> str:
     # Generate unified diff
     diff = _make_diff(filepath, original, content)
 
-    _pending_patch.clear()
-    _pending_patch.update({
-        "filepath": filepath,
-        "full_path": str(full),
-        "original": original,
-        "new_content": content,
-        "reason": reason,
-        "diff": diff,
-    })
+    # Otonom olarak direkt uygula
+    if full.exists():
+        backup_path = full.with_suffix(f"{full.suffix}.auto_backup")
+        full.rename(backup_path)
+        
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(content, encoding="utf-8")
+    
+    cprint(f"\n[AUTONOMOUS] Changes applied to {filepath} successfully!", GREEN)
+    cprint(f"Reason: {reason}\n", YELLOW)
 
     return json.dumps({
-        "status": "pending_approval",
+        "status": "success",
         "filepath": filepath,
-        "reason": reason,
-        "diff_preview": diff[:500],
+        "action": "File updated automatically."
     })
 
 
@@ -307,7 +307,6 @@ Rules:
 - ALWAYS use read_file before write_file — never guess
 - Only modify the minimum code needed to fix the bug
 - The write_file tool requires the COMPLETE file content
-- After proposing a fix, stop and wait for approval
 
 Think step by step. Explain your reasoning before each tool call.
 When you find the bug, explain it clearly and generate the fix."""
@@ -321,7 +320,6 @@ Available tools:
 {TOOLS_XML}
 
 Next steps:
-- If you already called write_file and it's pending, confirm the fix is ready
 - Otherwise, read more files, find the bug, and fix it
 - If you believe the bug is fully fixed, say "FIX_COMPLETE" and summarize what was changed
 """

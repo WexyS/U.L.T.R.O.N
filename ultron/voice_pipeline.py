@@ -269,6 +269,27 @@ TOOL_DECLARATIONS = [
             "required": ["code"]
         }
     },
+    {
+        "name": "ask_architect",
+        "description": "Kendi basina cozemeyecegin zor kod hatalarinda, inatci bug'larda veya karmasik yazilim mimarisi kararlarinda bulut tabanli kidemli mimara (Gemini) danis.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "Mimara acikca soracagin soru veya yardim istedigin konu"},
+                "code_context": {"type": "string", "description": "Varsa uzerinde calistigin kod parcasi veya hata ciktisi (error log)"}
+            },
+            "required": ["question"]
+        }
+    },
+    {
+        "name": "deep_research",
+        "description": "Verilen bir konuyu internette derinlemesine arastirir. Sadece aramakla kalmaz, baglantilarin icine girip makaleleri okuyarak sana kapsamli bir rapor cikarir.",
+        "parameters": {
+            "type": "object",
+            "properties": {"topic": {"type": "string", "description": "Detayli arastirilacak konu"}},
+            "required": ["topic"]
+        }
+    },
 ]
 
 # Kesfedilen skill'leri arac olarak ekle
@@ -809,6 +830,8 @@ class VoicePipeline:
             "weather_report": self._tool_weather_report,
             "code_helper": self._tool_code_helper,
             "computer_settings": self._tool_computer_settings,
+            "ask_architect": self._tool_ask_architect,
+            "deep_research": self._tool_deep_research,
         }
 
     def _tool_open_app(self, args: dict) -> str:
@@ -970,6 +993,22 @@ class VoicePipeline:
             return settings_run(parameters=args)
         except Exception as e:
             return f"Sistem ayarları hatası: {e}"
+
+    def _tool_ask_architect(self, args: dict) -> str:
+        """Bulut tabanli mimara (Gemini) danisir."""
+        try:
+            from ultron.actions.ask_architect import run as ask_run
+            return ask_run(parameters=args)
+        except Exception as e:
+            return f"Mimar araci hatasi: {e}"
+
+    def _tool_deep_research(self, args: dict) -> str:
+        """Derinlemesine internet arastirmasi yapar."""
+        try:
+            from ultron.actions.deep_research import run as research_run
+            return research_run(parameters=args)
+        except Exception as e:
+            return f"Derin arastirma hatasi: {e}"
 
     def _make_skill_handler(self, skill: dict):
         """Skill icin dinamik handler olustur."""
