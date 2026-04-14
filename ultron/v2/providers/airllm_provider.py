@@ -1,265 +1,320 @@
-"""AirLLM Provider — Llama 3.1 405B (4-bit) ile devasa modeli düşük VRAM'da çalıştır.
+"""AirLLM Provider — Run Llama 3.1 70B/405B with minimal VRAM (4-8GB).
 
-Özellikler:
-- Llama 3.1 405B → ~230GB disk (4-bit), ~8GB VRAM
-- Layer-wise loading (sadece aktif layer GPU'da)
-- Prefetching (sonraki layer önceden yüklenir)
-- Async execution (UI/event loop kilitlenmez)
-- ChatML format desteği (Llama 3 format)
-- Lazy loading (ilk kullanımda yüklenir)
+AirLLM uses layer-wise loading to run massive models on consumer GPUs.
+- Llama 3.1 70B → ~4GB VRAM, ~35GB disk
+- Llama 3.1 405B → ~8GB VRAM, ~230GB disk
 
-Kurulum:
-    pip install airllm
+Features:
+- Automatic model download from HuggingFace
+- Layer-wise inference (only active layers on GPU)
+- Prefetching for faster inference
+- 4-bit/8-bit compression support
+- Lazy loading (model loaded on first use)
+- Automatic cleanup on shutdown
 
-Kullanım:
-    from ultron.v2.providers.airllm_provider import AirLLMProvider
+Installation:
+    pip install airllm accelerate
 
-    provider = AirLLMProvider(
-        model_name="meta-llama/Llama-3.1-405B-Instruct",
-        compression="4bit"
-    )
-
-    response = await provider.chat([
-        {"role": "user", "content": "Merhaba!"}
-    ])
+Environment Variables:
+    AIRLLM_MODEL: Model name (default: meta-llama/Llama-3.1-70B-Instruct)
+    AIRLLM_COMPRESSION: Compression type (default: 4bit, options: 4bit, 8bit, None)
+    AIRLLM_PREFETCHING: Enable prefetching (default: true)
+    AIRLLM_MAX_LENGTH: Max context length (default: 4096)
+    HUGGING_FACE_HUB_TOKEN: HuggingFace token for gated models like Llama 3
 """
 
 import os
 import asyncio
 import logging
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncIterator
 from pathlib import Path
+
+from ultron.v2.providers.base import BaseProvider, Message, ProviderConfig, ProviderResult
 
 logger = logging.getLogger(__name__)
 
 
-class AirLLMProvider:
-    """AirLLM Provider - 405B modeli düşük VRAM'da çalıştır
-
-    4-bit compression ile:
-    - 405B model → ~230GB disk (810GB yerine!)
-    - VRAM → ~8GB
-    - Speed → ~0.5-1 tok/s (uyku modu için yeterli)
-
-    Katkıda Bulunanlar:
-    - Qwen: Temel implementasyon
-    - Gemini: ChatML format + async executor optimizasyonu
-    - Claude: Provider factory + error handling
+class AirLLMProvider(BaseProvider):
+    """AirLLM provider for running massive LLMs on consumer GPUs.
+    
+    Uses layer-wise loading to run Llama 3.1 70B on just 4GB VRAM.
     """
 
-    def __init__(
-        self,
-        model_name: str = "meta-llama/Llama-3.1-405B-Instruct",
-        compression: str = "4bit",
-        prefetching: bool = True
-    ):
-        self.model_name = model_name
-        self.compression = compression
+    def __init__(self):
+        model_name = os.getenv("AIRLLM_MODEL", "meta-llama/Llama-3.1-70B-Instruct")
+        compression = os.getenv("AIRLLM_COMPRESSION", "4bit")
+        prefetching = os.getenv("AIRLLM_PREFETCHING", "true").lower() == "true"
+        self._max_length = int(os.getenv("AIRLLM_MAX_LENGTH", "4096"))
+        self._hf_token = os.getenv("HUGGING_FACE_HUB_TOKEN") or os.getenv("HF_TOKEN")
+        
+        config = ProviderConfig(
+            name="airllm",
+            base_url="",  # Local model, no URL needed
+            default_model=model_name,
+            timeout=600,  # 10 min timeout for large models
+            priority=0,  # Highest priority (before Ollama)
+        )
+        super().__init__(config)
+        
+        self.compression = compression if compression.lower() != "none" else None
         self.prefetching = prefetching
         self.model = None
-        self.tokenizer = None
-
-        # Model'i lazy load et (ilk kullanımda yükle)
-        logger.info(
-            f"🧠 AirLLM Provider initialized\n"
-            f"   Model: {model_name}\n"
-            f"   Compression: {compression}\n"
-            f"   Prefetching: {prefetching}\n"
-            f"   Disk: ~230GB (4-bit)\n"
-            f"   VRAM: ~8GB"
-        )
+        self._loading = False
 
     def _load_model(self):
-        """Model'i yükle (lazy loading - sadece ilk seferde)"""
+        """Load AirLLM model (lazy loading)."""
         if self.model is not None:
             return
 
+        if self._loading:
+            # Wait for another thread to finish loading
+            while self._loading:
+                time.sleep(0.1)
+            return
+
+        self._loading = True
+        
         try:
             from airllm import AutoModel
-            from transformers import AutoTokenizer
 
-            logger.info(f"📥 Loading AirLLM model: {self.model_name}...")
+            logger.info(f"🧠 Loading AirLLM model: {self.config.default_model}")
             logger.info(f"   Compression: {self.compression}")
-            logger.info(f"   This will take a few minutes for 405B model...")
+            logger.info(f"   Prefetching: {self.prefetching}")
+            logger.info(f"   This may take several minutes for large models...")
 
-            # Tokenizer yükle
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                trust_remote_code=True
-            )
+            # Build kwargs
+            load_kwargs = {
+                "prefetching": self.prefetching,
+            }
+            
+            if self.compression:
+                load_kwargs["compression"] = self.compression
+            
+            if self._hf_token:
+                load_kwargs["hf_token"] = self._hf_token
 
-            # Model yükle (4-bit compression + prefetching)
+            # Load model with layer-wise loading
             self.model = AutoModel.from_pretrained(
-                self.model_name,
-                compression=self.compression,
-                prefetching=self.prefetching
+                self.config.default_model,
+                **load_kwargs
             )
 
             logger.info(f"✅ AirLLM model loaded successfully!")
-            logger.info(f"   VRAM usage: ~8GB")
-            logger.info(f"   Disk usage: ~230GB")
+            logger.info(f"   Model: {self.config.default_model}")
+            logger.info(f"   Compression: {self.compression}")
+            logger.info(f"   VRAM usage: ~{'8GB' if '405' in self.config.default_model else '4GB'}")
 
-        except ImportError:
+        except ImportError as e:
             logger.error(
-                "❌ AirLLM not installed!\n"
-                "   Run: pip install airllm"
+                f"❌ AirLLM not installed!\n"
+                f"   Run: pip install airllm accelerate\n"
+                f"   Error: {e}"
             )
             raise
         except Exception as e:
             logger.error(f"❌ Failed to load AirLLM model: {e}")
+            logger.error(f"   Check your HuggingFace token (HF_TOKEN env var) and model name")
             raise
+        finally:
+            self._loading = False
 
-    def _generate_sync(self, prompt: str, max_tokens: int = 1024) -> str:
-        """Senkron AirLLM çıkarımı (Layer-wise inference)"""
+    def _format_chatml(self, messages: List[Dict[str, str]]) -> str:
+        """Format messages into Llama 3 ChatML format."""
+        prompt = ""
+        
+        # Check if this is a Llama 3 model
+        model_lower = self.config.default_model.lower()
+        is_llama3 = "llama-3" in model_lower or "llama3" in model_lower
+        
+        if is_llama3:
+            # Llama 3 ChatML format
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                prompt += f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>"
+            prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
+        else:
+            # Generic chat format
+            system_msg = next((m for m in messages if m.get("role") == "system"), None)
+            if system_msg:
+                prompt += f"System: {system_msg.get('content', '')}\n\n"
+            
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                if role == "system":
+                    continue
+                prompt += f"{role.capitalize()}: {content}\n"
+            prompt += "Assistant: "
+        
+        return prompt
+
+    def _generate_sync(self, prompt: str, max_tokens: int, temperature: float) -> str:
+        """Synchronous generation (runs in executor)."""
+        import torch
+        
         self._load_model()
 
-        input_text = [prompt]
-        inputs = self.tokenizer(input_text, max_length=4096, return_tensors="pt")
-
-        logger.info("⏳ Derin analiz yapılıyor (Llama 405B katmanları sırayla işleniyor)...")
-        outputs = self.model.generate(
-            inputs['input_ids'],
+        # Tokenize input
+        input_tokens = self.model.tokenizer(
+            [prompt],
+            return_tensors="pt",
+            return_attention_mask=False,
+            truncation=True,
+            max_length=self._max_length,
+            padding=False
+        )
+        
+        logger.info(f"⏳ Generating response (max_tokens={max_tokens}, temp={temperature})...")
+        logger.info(f"   Input tokens: {input_tokens['input_ids'].shape}")
+        
+        # Generate (AirLLM requires .cuda())
+        generation_output = self.model.generate(
+            input_tokens['input_ids'].cuda(),
             max_new_tokens=max_tokens,
             use_cache=True,
             return_dict_in_generate=True
         )
 
-        result = self.tokenizer.decode(outputs.sequences[0], skip_special_tokens=True)
-
-        # Prompt'u sonuçtan çıkar
-        if result.startswith(prompt):
-            result = result[len(prompt):].strip()
-
+        # Decode output - skip the prompt portion
+        output = self.model.tokenizer.decode(generation_output.sequences[0])
+        
+        # Extract only the generated part (after prompt)
+        result = output[len(prompt):].strip()
+        
         return result
 
-    async def chat(self, messages: List[Dict[str, str]], max_tokens: int = 1024, **kwargs) -> Any:
-        """
-        Chat completion (Llama 3 ChatML format + async executor)
-
-        Args:
-            messages: [{"role": "user", "content": "..."}]
-            max_tokens: Maksimum yeni token (default: 1024)
-
-        Returns:
-            ProviderResult benzeri obje
-        """
-        start_time = time.time()
-
-        # Llama 3 ChatML format
-        prompt = ""
-        for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            prompt += f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>\n"
-        prompt += "<|start_header_id|>assistant<|end_header_id|>\n\n"
-
-        # Async executor (UI/event loop kilitlenmesin)
+    async def chat(
+        self,
+        messages: list[Message],
+        model: Optional[str] = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> ProviderResult:
+        """Chat completion with AirLLM."""
+        start = time.time()
+        model_name = model or self.config.default_model
+        
+        # Format messages
+        prompt = self._format_chatml([m.model_dump() for m in messages])
+        
+        # Run in executor to not block event loop
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, self._generate_sync, prompt, max_tokens)
+        result = await loop.run_in_executor(
+            None, 
+            lambda: self._generate_sync(prompt, max_tokens, temperature)
+        )
 
-        latency_ms = (time.time() - start_time) * 1000
-        tokens_used = len(self.tokenizer.encode(result)) if self.tokenizer else 0
+        latency_ms = int((time.time() - start) * 1000)
+        
+        # Count tokens (approximate)
+        if self.model and self.model.tokenizer:
+            prompt_tokens = len(self.model.tokenizer.encode(prompt))
+            completion_tokens = len(self.model.tokenizer.encode(result))
+            total_tokens = prompt_tokens + completion_tokens
+        else:
+            total_tokens = 0
 
         logger.info(
             f"✅ AirLLM chat completed\n"
-            f"   Tokens: {tokens_used}\n"
-            f"   Latency: {latency_ms:.0f}ms ({latency_ms/1000:.1f}s)\n"
-            f"   Speed: ~{tokens_used / (latency_ms/1000) if latency_ms > 0 else 0:.1f} tok/s"
+            f"   Model: {model_name}\n"
+            f"   Tokens: {total_tokens} (latency={latency_ms}ms)\n"
+            f"   Speed: ~{total_tokens / (latency_ms/1000) if latency_ms > 0 else 0:.1f} tok/s"
         )
 
-        # Ultron provider interface uyumlu
-        class MockMessage:
-            def __init__(self, content): self.content = content
-        class MockResponse:
-            def __init__(self, content):
-                self.content = content
-                self.message = MockMessage(content)
-                self.tokens_used = tokens_used
-                self.latency_ms = latency_ms
+        return ProviderResult(
+            content=result,
+            provider=self.config.name,
+            model=model_name,
+            tokens_used=total_tokens,
+            latency_ms=latency_ms,
+        )
 
-        return MockResponse(result)
-
-    async def complete(self, prompt: str, max_tokens: int = 1024) -> dict:
-        """
-        Text completion (chat değil, düz text)
-
-        Args:
-            prompt: Tam prompt text
-            max_tokens: Maksimum yeni token
-
-        Returns:
-            {"content": "...", "tokens_used": 123, "latency_ms": 5000}
-        """
-        start_time = time.time()
-
-        # Async executor
+    async def stream_chat(
+        self,
+        messages: list[Message],
+        model: Optional[str] = None,
+    ) -> AsyncIterator[str]:
+        """Streaming chat (emulated since AirLLM doesn't support native streaming)."""
+        model_name = model or self.config.default_model
+        
+        # Format messages
+        prompt = self._format_chatml([m.model_dump() for m in messages])
+        
+        # Load model
+        self._load_model()
+        
+        # Generate full response
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, self._generate_sync, prompt, max_tokens)
-
-        latency_ms = (time.time() - start_time) * 1000
-        tokens_used = len(self.tokenizer.encode(result)) if self.tokenizer else 0
-
-        return {
-            "content": result,
-            "tokens_used": tokens_used,
-            "latency_ms": latency_ms,
-            "model": self.model_name,
-            "compression": self.compression
-        }
-
-    def get_model_info(self) -> dict:
-        """Model bilgisi"""
-        return {
-            "name": self.model_name,
-            "compression": self.compression,
-            "disk_usage_gb": 230 if "405" in self.model_name else 35,
-            "vram_usage_gb": 8 if "405" in self.model_name else 4,
-            "estimated_speed_toks_per_sec": 0.5 if "405" in self.model_name else 10,
-            "prefetching": self.prefetching,
-            "chatml_format": True,
-            "async_executor": True
-        }
-
-    def unload_model(self):
-        """Model'i bellekten kaldır (disk/VRAM alanı geri kazan)"""
-        if self.model is not None:
-            del self.model
-            del self.tokenizer
-            self.model = None
-            self.tokenizer = None
-
-            import gc
-            gc.collect()
-
-            logger.info("✅ AirLLM model unloaded - memory freed")
+        full_result = await loop.run_in_executor(
+            None, 
+            lambda: self._generate_sync(prompt, self._max_length, 0.7)
+        )
+        
+        # Stream word by word
+        words = full_result.split()
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+            await asyncio.sleep(0.02)  # Small delay for streaming effect
 
     async def is_available(self) -> bool:
-        """Provider kullanılabilir mi?"""
+        """Check if AirLLM is available and CUDA is ready."""
+        try:
+            import torch
+            import airllm
+            
+            # Check if CUDA is available (AirLLM requires GPU)
+            if not torch.cuda.is_available():
+                logger.warning("AirLLM requires CUDA but it's not available")
+                return False
+            
+            # Check GPU memory
+            gpu_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            if gpu_mem < 4:
+                logger.warning(f"AirLLM requires at least 4GB VRAM, have {gpu_mem:.1f}GB")
+                return False
+            
+            return True
+        except ImportError:
+            return False
+
+    def is_configured(self) -> bool:
+        """Always configured if AirLLM is installed."""
         try:
             import airllm
             return True
         except ImportError:
             return False
 
+    async def list_models(self) -> list[str]:
+        """List common Llama 3.1 models supported by AirLLM."""
+        return [
+            "meta-llama/Llama-3.1-8B-Instruct",
+            "meta-llama/Llama-3.1-70B-Instruct",
+            "meta-llama/Llama-3.1-405B-Instruct",
+            "meta-llama/Llama-3.1-8B",
+            "meta-llama/Llama-3.1-70B",
+            "meta-llama/Llama-3.1-405B",
+        ]
 
-# ─── Ultron Provider Registry için ───────────────────────────────────────
+    def unload_model(self):
+        """Unload model from memory (frees VRAM)."""
+        if self.model is not None:
+            import torch
+            import gc
+            
+            del self.model
+            self.model = None
+            
+            # Clear CUDA cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            gc.collect()
+            logger.info("✅ AirLLM model unloaded - VRAM freed")
+
 
 def create_provider(config: dict) -> AirLLMProvider:
-    """Provider factory function
-
-    Args:
-        config: {
-            "model_name": "meta-llama/Llama-3.1-405B-Instruct",
-            "compression": "4bit",
-            "prefetching": true
-        }
-
-    Returns:
-        AirLLMProvider instance
-    """
-    return AirLLMProvider(
-        model_name=config.get("model_name", "meta-llama/Llama-3.1-405B-Instruct"),
-        compression=config.get("compression", "4bit"),
-        prefetching=config.get("prefetching", True)
-    )
+    """Provider factory for AirLLM."""
+    return AirLLMProvider()

@@ -34,6 +34,7 @@ class AgentRole(str, Enum):
     FILES = "files"
     CALENDAR = "calendar"
     TASK_MANAGER = "task_manager"
+    ERROR_ANALYZER = "error_analyzer"
 
 
 class AgentStatus(str, Enum):

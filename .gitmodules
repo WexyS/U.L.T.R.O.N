@@ -1,0 +1,6 @@
+[submodule "marketing-skills"]
+	path = marketing-skills
+	url = https://github.com/coreyhaines31/marketingskills.git
+[submodule "superpowers"]
+	path = superpowers
+	url = https://github.com/ricklan/superpowers.git

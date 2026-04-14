@@ -24,6 +24,7 @@ from ultron.v2.agents.sysmon_agent import SystemMonitorAgent
 from ultron.v2.agents.clipboard_agent import ClipboardAgent
 from ultron.v2.agents.meeting_agent import MeetingAgent
 from ultron.v2.agents.files_agent import FilesAgent
+from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +185,14 @@ class Orchestrator:
             )
         except Exception as e:
             logger.warning("Failed to initialize FilesAgent: %s", e)
+
+        # Initialize Error Analyzer Agent (for self-healing)
+        try:
+            self.error_analyzer = ErrorAnalyzerAgent(llm_router=self.llm_router)
+            logger.info("✓ ErrorAnalyzerAgent initialized (self-healing enabled)")
+        except Exception as e:
+            logger.warning("Failed to initialize ErrorAnalyzerAgent: %s", e)
+            self.error_analyzer = None
 
         logger.info("Initialized %d agents", len(self.agents))
 

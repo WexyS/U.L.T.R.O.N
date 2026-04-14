@@ -8,25 +8,25 @@ from ultron.v2.providers.fallback_chain import FallbackChain
 # Görev tipi → provider öncelik sırası
 TASK_ROUTES = {
     "fast": ["groq", "minimax", "ollama", "cloudflare", "together"],
-    "code": ["ollama", "openrouter", "groq", "together"],
-    "long": ["gemini", "openrouter", "ollama"],
-    "cheap": ["ollama", "cloudflare", "hf", "groq"],
-    "creative": ["openrouter", "ollama", "gemini"],
+    "code": ["airllm", "ollama", "openrouter", "groq", "together"],
+    "long": ["airllm", "gemini", "openrouter", "ollama"],
+    "cheap": ["airllm", "ollama", "cloudflare", "hf", "groq"],
+    "creative": ["airllm", "openrouter", "ollama", "gemini"],
     "search": ["openrouter", "gemini", "groq"],
-    "self_evolve": ["minimax", "ollama", "openrouter"],  # YENİ: MiniMax M2.7 için
-    "deep_analysis": ["airllm_405b", "ollama", "openrouter"],
-    "sleep_mode": ["airllm_405b"],
+    "self_evolve": ["airllm", "minimax", "ollama", "openrouter"],
+    "deep_analysis": ["airllm", "ollama", "openrouter"],
+    "sleep_mode": ["airllm"],
     "default": [
+        "airllm",
         "ollama",
         "groq",
-        "minimax",  # YENİ: MiniMax M2.7
+        "minimax",
         "openrouter",
         "gemini",
         "cloudflare",
         "together",
         "hf",
         "openai",
-        "airllm_405b",
     ],
 }
 
@@ -34,6 +34,7 @@ TASK_ROUTES = {
 class ProviderRouter:
     def __init__(self):
         self.providers: dict[str, BaseProvider] = {}
+        self.priority_order: list[str] = []  # Add priority order list
         self._load()
 
     def _load(self):
@@ -46,7 +47,19 @@ class ProviderRouter:
         from ultron.v2.providers.hf_provider import HFProvider
         from ultron.v2.providers.openai_provider import OpenAIProvider
         from ultron.v2.providers.minimax_provider import MiniMaxProvider
-        from ultron.v2.providers.airllm_provider import create_provider as create_airllm
+        from ultron.v2.providers.airllm_provider import AirLLMProvider
+
+        # AirLLM Provider (highest priority - 70B/405B local)
+        try:
+            airllm_provider = AirLLMProvider()
+            if airllm_provider.is_configured():
+                self.providers["airllm"] = airllm_provider
+                self.priority_order.append("airllm")
+                print(f"[Router] ✓ airllm aktif ({airllm_provider.config.default_model})")
+            else:
+                print(f"[Router] ✗ airllm yüklü değil (pip install airllm)")
+        except Exception as e:
+            print(f"[Router] ✗ airllm yükleme hatası: {e}")
 
         for cls in [
             OllamaProvider,
@@ -62,25 +75,10 @@ class ProviderRouter:
             p = cls()
             if p.is_configured():
                 self.providers[p.config.name] = p
+                self.priority_order.append(p.config.name)
                 print(f"[Router] ✓ {p.config.name} aktif")
             else:
                 print(f"[Router] ✗ {p.config.name} key yok, atlandı")
-        
-        # AirLLM Provider (405B - 4-bit compression)
-        try:
-            import airllm
-            airllm_config = {
-                "model_name": os.environ.get("AIRLLM_MODEL", "meta-llama/Llama-3.1-405B"),
-                "compression": os.environ.get("AIRLLM_COMPRESSION", "4bit"),
-                "prefetching": os.environ.get("AIRLLM_PREFETCHING", "true").lower() == "true"
-            }
-            airllm_provider = create_airllm(airllm_config)
-            self.providers["airllm_405b"] = airllm_provider
-            print(f"[Router] ✓ airllm_405b aktif (405B 4-bit, ~230GB disk, ~8GB VRAM)")
-        except ImportError:
-            print(f"[Router] ✗ airllm_405b yüklü değil (pip install airllm)")
-        except Exception as e:
-            print(f"[Router] ✗ airllm_405b yükleme hatası: {e}")
 
     async def route(
         self,
