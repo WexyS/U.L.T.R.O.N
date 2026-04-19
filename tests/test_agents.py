@@ -88,7 +88,11 @@ class TestAgentImports:
             "SystemMonitorAgent",
             "ClipboardAgent",
             "MeetingAgent",
-            "FileOrganizerAgent",
+            "FilesAgent",
+            "CalendarAgent",
+            "TaskManagerAgent",
+            "OpenGuiderBridgeAgent",
+            "DebateAgent",
         }
         assert set(__all__) == expected
 
@@ -143,12 +147,16 @@ class TestAgentRoleEnum:
         "HOME_CONTROLLER",
         "MEMORY_KEEPER",
         "VOICE_ASSISTANT",
-        # ── New agents (v2.0 additions) ──
         "EMAIL",
         "SYSMON",
         "CLIPBOARD",
         "MEETING",
         "FILES",
+        "CALENDAR",
+        "TASK_MANAGER",
+        "ERROR_ANALYZER",
+        "OPENGUIDER_BRIDGE",
+        "DEBATE",
     }
 
     def test_all_expected_roles_present(self) -> None:
@@ -333,16 +341,15 @@ class TestCoderAgentInstantiation:
         mock_blackboard: MagicMock,
         tmp_path,
     ) -> None:
-        """_is_code_safe always returns True but logs warnings."""
+        """_is_code_safe rejects dangerous patterns before execution."""
         agent = CoderAgent(
             llm_router=mock_llm_router,
             event_bus=mock_event_bus,
             blackboard=mock_blackboard,
             work_dir=str(tmp_path / "ws"),
         )
-        # Even "dangerous" code returns True (controlled env)
         assert agent._is_code_safe("print('hello')") is True
-        assert agent._is_code_safe("os.system('rm -rf /')") is True
+        assert agent._is_code_safe("os.system('rm -rf /')") is False
 
 
 # ===========================================================================

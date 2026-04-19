@@ -126,9 +126,13 @@ class MemoryEngine:
                 name=f"store_{entry_id}"
             )
             self._background_tasks.append(task)
-            task.add_done_callback(
-                lambda t: self._background_tasks.remove(t) if t in self._background_tasks else None
-            )
+            def _drop_done(t: asyncio.Task) -> None:
+                try:
+                    self._background_tasks.remove(t)
+                except ValueError:
+                    pass
+
+            task.add_done_callback(_drop_done)
             logger.debug("Memory store task queued: %s (%s)", entry_id, entry_type)
         except RuntimeError:
             # No running event loop — store synchronously with thread safety

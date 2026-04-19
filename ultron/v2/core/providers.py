@@ -28,6 +28,7 @@ class LLMResponse:
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     finish_reason: Optional[str] = None
+    tool_calls: Optional[list[dict[str, Any]]] = None
 
 @dataclass
 class ProviderStats:

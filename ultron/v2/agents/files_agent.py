@@ -135,19 +135,18 @@ class FileOrganizerHandler:
                 path.name,
                 category,
             )
-            # Fire-and-forget: schedule async on event loop
-            loop = None
+            # Watchdog thread'i senkron: create_task çalışan döngü olmadan işe yaramaz
+            payload = {"path": str(path), "category": category}
+            coro = self._agent._publish_event("file.detected", payload)
             try:
-                loop = asyncio.get_event_loop()
+                asyncio.get_running_loop()
             except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            loop.create_task(
-                self._agent._publish_event(
-                    "file.detected",
-                    {"path": str(path), "category": category},
-                ),
-            )
+                try:
+                    asyncio.run(coro)
+                except Exception as run_exc:
+                    logger.error("Watchdog publish (asyncio.run) error: %s", run_exc)
+            else:
+                asyncio.create_task(coro)
         except Exception as exc:
             logger.error("Watchdog on_created error: %s", exc)
 

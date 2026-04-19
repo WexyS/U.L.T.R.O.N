@@ -258,14 +258,30 @@ async def main() -> None:
         work_dir=args.work_dir,
     )
 
-    # ⚡ Start Eternal Autonomous Evolution Daemon
-    try:
-        from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
-        evolution_daemon = EternalEvolutionEngine(orchestrator, sleep_interval_minutes=60)
-        asyncio.create_task(evolution_daemon.start_loop())
-        console.print("[dim]⚡ Eternal Autonomous Evolution Engine started in background...[/dim]")
-    except Exception as e:
-        console.print(f"[yellow]Eternal daemon failed to start: {e}[/yellow]")
+    # ⚡ Optional: Eternal Autonomous Evolution Daemon (DISABLED by default)
+    #
+    # Safety: auto self-modification + git commit/push must never run unless explicitly enabled.
+    # Enable with:
+    #   ULTRON_EVOLUTION_ENABLED=1
+    #   ULTRON_EVOLUTION_INTERVAL_MINUTES=15   (optional)
+    #
+    # Note: even when enabled, git commit/push behavior is additionally gated inside the engine.
+    import os
+    if os.getenv("ULTRON_EVOLUTION_ENABLED", "0").strip() in ("1", "true", "yes", "on"):
+        try:
+            from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
+
+            interval = int(os.getenv("ULTRON_EVOLUTION_INTERVAL_MINUTES", "15"))
+            if interval <= 0:
+                raise ValueError("ULTRON_EVOLUTION_INTERVAL_MINUTES must be > 0")
+
+            evolution_daemon = EternalEvolutionEngine(orchestrator, sleep_interval_minutes=interval)
+            asyncio.create_task(evolution_daemon.start_loop())
+            console.print(
+                f"[dim]⚡ Eternal Autonomous Evolution Engine enabled (interval={interval}m).[/dim]"
+            )
+        except Exception as e:
+            console.print(f"[yellow]Eternal daemon failed to start: {e}[/yellow]")
 
     # System ready
     console.print("\n[bold green]System Initialized Successfully![/bold green]")

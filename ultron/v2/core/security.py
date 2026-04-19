@@ -248,6 +248,10 @@ class SecurityManager:
         self._allowed_file_roots.append(Path(path))
         logger.info("Added allowed path: %s", path)
 
+    def is_path_allowed(self, path_str: str) -> bool:
+        """Public wrapper for path allowlist checks."""
+        return self._is_path_allowed(path_str)
+
     # ── Rate Limiting ────────────────────────────────────────────────────
 
     def _check_rate_limit(self, agent_key: str) -> bool:

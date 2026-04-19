@@ -102,15 +102,21 @@ async def lifespan(app: FastAPI):
             from ultron.v2.core.auto_launchers import start_all_auto_launchers
             from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
             import asyncio
+            import os
             
             await start_all_auto_launchers()
-            
-            evolution_daemon = EternalEvolutionEngine(_orchestrator, sleep_interval_minutes=60)
-            asyncio.create_task(evolution_daemon.start_loop())
-            if _use_structlog:
-                logger.info("eternal_daemon_started")
-            else:
-                logger.info("Eternal Autonomous Evolution daemon hooked and running.")
+
+            # Optional: Eternal Evolution (DISABLED by default)
+            if os.getenv("ULTRON_EVOLUTION_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on"):
+                interval = int(os.getenv("ULTRON_EVOLUTION_INTERVAL_MINUTES", "15"))
+                if interval <= 0:
+                    raise ValueError("ULTRON_EVOLUTION_INTERVAL_MINUTES must be > 0")
+                evolution_daemon = EternalEvolutionEngine(_orchestrator, sleep_interval_minutes=interval)
+                asyncio.create_task(evolution_daemon.start_loop())
+                if _use_structlog:
+                    logger.info("eternal_daemon_started", interval_minutes=interval)
+                else:
+                    logger.info("Eternal Autonomous Evolution daemon enabled (interval=%dm).", interval)
         except Exception as e:
             if not _use_structlog:
                 logger.warning(f"Failed to start background daemons: {e}")

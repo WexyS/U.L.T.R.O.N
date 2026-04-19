@@ -22,6 +22,11 @@ class EternalEvolutionEngine:
         self.debate_engine = DebateEngine(orchestrator.llm_router)
         self.sleep_interval_minutes = sleep_interval_minutes
         self._running = False
+        # Safety gates (default: do not self-modify or touch git remotely unless explicitly enabled)
+        import os
+        self.enabled = os.getenv("ULTRON_EVOLUTION_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+        self.allow_git_writes = os.getenv("ULTRON_EVOLUTION_ALLOW_GIT", "0").strip().lower() in ("1", "true", "yes", "on")
+        self.allow_push = os.getenv("ULTRON_EVOLUTION_ALLOW_PUSH", "0").strip().lower() in ("1", "true", "yes", "on")
 
     async def _run_git_command(self, cmd: str) -> bool:
         """Helper to run a git command and return success status."""
@@ -65,6 +70,10 @@ class EternalEvolutionEngine:
 
     async def evolution_cycle(self):
         logger.info("⚡ [Eternal Evolution] Starting autonomous cycle...")
+
+        if not self.enabled:
+            logger.info("⚡ [Eternal Evolution] Disabled by policy (ULTRON_EVOLUTION_ENABLED=0).")
+            return
         
         if not await self._is_working_tree_clean():
             logger.info("⚡ [Eternal Evolution] Working tree not clean. Aborting until user commits their manual changes.")
@@ -106,22 +115,32 @@ class EternalEvolutionEngine:
             await self._run_git_command("git reset --hard && git clean -fd")
             return
 
-        # 5. Commit & Push
+        # 5. Optional: Commit & Push (disabled by default)
+        if not self.allow_git_writes:
+            logger.info("⚡ [Eternal Evolution] Changes left uncommitted (ULTRON_EVOLUTION_ALLOW_GIT=0).")
+            return
+
         logger.info("⚡ [Eternal Evolution] Implementation successful and tested. Committing...")
         await self._run_git_command("git add .")
         commit_msg = f"feat(autonomous): {feature_idea}"
         commit_success = await self._run_git_command(f'git commit -m "{commit_msg}"')
-        
-        if commit_success:
-            logger.info("⚡ [Eternal Evolution] Auto-Pushing to remote repo...")
-            await self._run_git_command("git push")
-            logger.info(f"⚡ [Eternal Evolution] Evolution cycle complete! Successfully added: {feature_idea}")
-        else:
+
+        if not commit_success:
             logger.warning("⚡ [Eternal Evolution] Commit lacked changes. Canceling cycle.")
+            return
+
+        if not self.allow_push:
+            logger.info("⚡ [Eternal Evolution] Commit created but push disabled (ULTRON_EVOLUTION_ALLOW_PUSH=0).")
+            return
+
+        logger.info("⚡ [Eternal Evolution] Auto-Pushing to remote repo...")
+        await self._run_git_command("git push")
+        logger.info(f"⚡ [Eternal Evolution] Evolution cycle complete! Successfully added: {feature_idea}")
 
     async def start_loop(self):
         """Runs the loop forever."""
-        if self._running: return
+        if self._running:
+            return
         self._running = True
         logger.info(f"⚡ [Eternal Evolution] Engine started. Loop frequency: Every {self.sleep_interval_minutes} minutes.")
         

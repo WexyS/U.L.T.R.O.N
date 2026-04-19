@@ -21,6 +21,13 @@ class LongTermMemory:
         self.chroma = chromadb.PersistentClient(path="data/chroma")
         self.collection = self.chroma.get_or_create_collection("ultron_memory")
 
+    @staticmethod
+    def _fts_escape(query: str) -> str:
+        """SQLite FTS5 MATCH içinde güvenli kullanım için çift tırnak kaçışı."""
+        if not query:
+            return '""'
+        return query.replace('"', '""')
+
     async def init(self):
         async with aiosqlite.connect(self.db_path) as db:
             await db.executescript("""

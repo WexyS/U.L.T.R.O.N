@@ -67,11 +67,38 @@ def run(parameters: dict, **kwargs) -> list[dict]:
             "install": "pip install duckduckgo-search"
         }]
     except Exception as e:
-        logger.error(f"Web search hatası: {e}")
-        return [{
-            "error": str(e),
-            "query": query
-        }]
+        # Fallback: DuckDuckGo HTML endpoint (less featureful, but often more reliable).
+        # We keep it lightweight: extract top links/snippets.
+        logger.warning("Web search (DDGS) failed, trying HTML fallback: %s", e)
+        try:
+            import httpx
+            from bs4 import BeautifulSoup
+            from urllib.parse import quote_plus
+
+            url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+            headers = {"User-Agent": "Mozilla/5.0 (Ultron; +https://github.com)"}
+            r = httpx.get(url, timeout=15, headers=headers, follow_redirects=True)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+
+            out: list[dict] = []
+            for a in soup.select("a.result__a")[:max_results]:
+                title = a.get_text(" ", strip=True)
+                href = a.get("href", "")
+                snippet_el = a.find_parent("div", class_="result") if a else None
+                snippet = ""
+                if snippet_el:
+                    sn = snippet_el.select_one(".result__snippet")
+                    if sn:
+                        snippet = sn.get_text(" ", strip=True)
+                out.append({"rank": len(out) + 1, "title": title, "url": href, "snippet": snippet})
+
+            if out:
+                return out
+        except Exception as e2:
+            logger.error("Web search HTML fallback failed: %s", e2)
+
+        return [{"error": str(e), "query": query}]
 
 
 def search_github_trending(language: str = "python", week: bool = True) -> list[dict]:

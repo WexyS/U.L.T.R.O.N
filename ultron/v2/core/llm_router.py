@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, AsyncIterator, Optional
+
+from ultron.v2.mcp.bridge import MCPBridge
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,7 @@ class LLMResponse:
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     finish_reason: Optional[str] = None
+    tool_calls: Optional[list[dict[str, Any]]] = None
 
 
 @dataclass
@@ -383,6 +387,24 @@ class OpenAIProvider(LLMProvider):
             output_cost = getattr(usage, 'completion_tokens', 0) * 15 / 1_000_000
             self.stats.total_cost_usd += input_cost + output_cost
 
+            msg = response.choices[0].message
+            tcalls = getattr(msg, "tool_calls", None)
+            serialized: Optional[list[dict[str, Any]]] = None
+            if tcalls:
+                serialized = []
+                for c in tcalls:
+                    fn = getattr(c, "function", None)
+                    serialized.append(
+                        {
+                            "id": getattr(c, "id", ""),
+                            "type": getattr(c, "type", "function"),
+                            "function": {
+                                "name": getattr(fn, "name", "") if fn else "",
+                                "arguments": getattr(fn, "arguments", "") if fn else "",
+                            },
+                        }
+                    )
+
             return LLMResponse(
                 content=content,
                 provider=self.name,
@@ -391,6 +413,7 @@ class OpenAIProvider(LLMProvider):
                 cost_usd=input_cost + output_cost,
                 latency_ms=latency,
                 finish_reason=response.choices[0].finish_reason,
+                tool_calls=serialized,
             )
         except Exception as e:
             self.stats.failed_calls += 1
@@ -724,6 +747,97 @@ class LLMRouter:
 
         raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
 
+    def _providers_supporting_tools(self) -> list[str]:
+        """tools= destekleyen sağlıklı sağlayıcılar (OpenAI uyumlu MCP döngüsü için)."""
+        import inspect
+
+        ordered: list[str] = []
+        for name in self.get_healthy_providers():
+            provider = self.providers.get(name)
+            if not provider:
+                continue
+            try:
+                if "tools" in inspect.signature(provider.chat).parameters:
+                    ordered.append(name)
+            except (TypeError, ValueError):
+                continue
+        return ordered
+
+    async def _chat_with_tools_single(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+    ) -> LLMResponse:
+        names = self._providers_supporting_tools()
+        if not names:
+            raise RuntimeError(
+                "MCP araç döngüsü için `tools` destekleyen sağlayıcı yok. "
+                "OPENAI_API_KEY veya OPENROUTER_API_KEY ekleyin."
+            )
+        last_error: Optional[Exception] = None
+        for provider_name in names:
+            provider = self.providers[provider_name]
+            try:
+                return await provider.chat(
+                    messages,
+                    temperature=temperature or 0.3,
+                    max_tokens=max_tokens or 4096,
+                    tools=tools,
+                )
+            except Exception as e:
+                last_error = e
+                logger.warning("Tool-chat provider %s failed: %s", provider_name, e)
+        raise RuntimeError(f"MCP tool chat başarısız: {last_error}")
+
+    async def chat_with_mcp_tool_loop(
+        self,
+        messages: list[dict],
+        mcp_bridge: MCPBridge,
+        *,
+        max_tool_rounds: int = 8,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> LLMResponse:
+        """MCP araç şemaları ile çok tur tool çağrısı (OpenAI/OpenRouter tool_calls)."""
+        tools = mcp_bridge.openai_tools()
+        if not tools:
+            return await self.chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+        msgs: list[dict[str, Any]] = [dict(x) for x in messages]
+        last = LLMResponse(content="", provider="none", model="none")
+
+        for _ in range(max_tool_rounds):
+            last = await self._chat_with_tools_single(msgs, tools, temperature, max_tokens)
+            if not last.tool_calls:
+                return last
+
+            msgs.append(
+                {
+                    "role": "assistant",
+                    "content": last.content or None,
+                    "tool_calls": last.tool_calls,
+                }
+            )
+            for tc in last.tool_calls:
+                fn = tc.get("function") or {}
+                name = fn.get("name") or ""
+                raw_a = fn.get("arguments") or "{}"
+                try:
+                    args = json.loads(raw_a) if isinstance(raw_a, str) else (raw_a or {})
+                except json.JSONDecodeError:
+                    args = {}
+                out = await mcp_bridge.invoke_openai_function(name, args)
+                msgs.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id", ""),
+                        "content": out,
+                    }
+                )
+        return last
+
     async def stream_chat(
         self,
         messages: list[dict],
@@ -842,7 +956,24 @@ class OpenRouterProvider(LLMProvider):
             # Close client to prevent resource leak
             await client.close()
             latency = (time.monotonic() - start) * 1000
-            content = resp.choices[0].message.content or ''
+            msg = resp.choices[0].message
+            content = msg.content or ''
+            tcalls = getattr(msg, "tool_calls", None)
+            serialized: Optional[list[dict[str, Any]]] = None
+            if tcalls:
+                serialized = []
+                for c in tcalls:
+                    fn = getattr(c, "function", None)
+                    serialized.append(
+                        {
+                            "id": getattr(c, "id", ""),
+                            "type": getattr(c, "type", "function"),
+                            "function": {
+                                "name": getattr(fn, "name", "") if fn else "",
+                                "arguments": getattr(fn, "arguments", "") if fn else "",
+                            },
+                        }
+                    )
             self.stats.successful_calls += 1
             self.stats.total_latency_ms += latency
             self.stats.last_active = datetime.now()
@@ -854,7 +985,8 @@ class OpenRouterProvider(LLMProvider):
             return LLMResponse(content=content, provider=self.name, model=self._model,
                                tokens_used=getattr(u, 'total_tokens', 0),
                                cost_usd=ic+oc, latency_ms=latency,
-                               finish_reason=resp.choices[0].finish_reason)
+                               finish_reason=resp.choices[0].finish_reason,
+                               tool_calls=serialized)
         except Exception as e:
             self.stats.failed_calls += 1
             self.stats.last_error = str(e)

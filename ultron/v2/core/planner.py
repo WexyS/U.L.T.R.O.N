@@ -263,8 +263,17 @@ class Planner:
 
     # ── Plan Execution ───────────────────────────────────────────────────
 
-    async def execute_plan(self, plan: ExecutionPlan, orchestrator=None) -> ExecutionPlan:
-        """Execute a plan step by step, respecting dependencies."""
+    async def execute_plan(
+        self,
+        plan: ExecutionPlan,
+        orchestrator=None,
+        *,
+        process_depth: int = 0,
+    ) -> ExecutionPlan:
+        """Execute a plan step by step, respecting dependencies.
+
+        process_depth: orchestrator.process için _depth tabanı (sonsuz görev önleme).
+        """
         plan.status = StepStatus.RUNNING
 
         while True:
@@ -290,7 +299,10 @@ class Planner:
 
                 try:
                     if orchestrator:
-                        result = await orchestrator.process(step.description)
+                        result = await orchestrator.process(
+                            step.description,
+                            _depth=process_depth + 1,
+                        )
                         step.result = str(result)[:1000]
                         step.status = StepStatus.COMPLETED
                     else:

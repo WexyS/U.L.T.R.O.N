@@ -74,6 +74,9 @@ dependencies = [
     "bleach>=6.1.0",
     "cssutils>=2.10.0",
 
+    # ── MCP (Model Context Protocol) stdio clients ───────────────────
+    "mcp>=1.8.0",
+
     # ── Additional Provider SDKs (optional) ───────────────────────────
     "tenacity>=8.3.0",
 

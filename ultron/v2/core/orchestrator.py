@@ -33,8 +33,18 @@ from ultron.v2.core.reasoning_engine import ReasoningEngine
 from ultron.v2.core.planner import Planner
 from ultron.v2.core.security import SecurityManager
 from ultron.v2.core.self_improvement import SelfImprovementEngine
+from ultron.v2.mcp.bridge import MCPBridge
+from ultron.v2.mcp.lifecycle import MCPClusterManager
+from ultron.v2.mcp.loader import load_mcp_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _default_disk_usage_path() -> str:
+    """Windows'ta '/' güvenilir olmayabilir; sistem sürücüsünü kullan."""
+    if os.name == "nt":
+        return os.environ.get("SystemDrive", "C:") + "\\"
+    return "/"
 
 
 # ─── Skill & Agent Discovery ────────────────────────────────────────────────
@@ -52,6 +62,14 @@ def _discover_agents() -> list[dict]:
 
 # Keyword → intent mapping for fast routing
 INTENT_KEYWORDS = {
+    "autonomous": [
+        "otonom", "autonomous", "işi bitir", "görevi tamamla", "kendi kendine yap",
+        "openclaw", "plan yap ve uygula", "multi-step goal", "hedefi tamamla",
+    ],
+    "gamedev": [
+        "ue5", "unreal engine", "unreal", "blueprint", "oyun geliştirme", "game dev",
+        "level design", "gameplay", "oyun tasarımı",
+    ],
     "code": ["kod yaz", "kod", "yazılım", "program", "python", "javascript", "function", "script",
              "calculate", "hesapla", "debug", "hata ayıkla", "çalıştır", "execute", "code"],
     "research": ["araştır", "research", "bul", "search", "nedir", "what is", "explain",
@@ -62,8 +80,10 @@ INTENT_KEYWORDS = {
             "program", "exe", "steam", "chrome", "spotify", "discord", "notepad",
             "youtube", "twitter", "x.com", "reddit", "github", "gmail", "google",
             "netflix", "amazon", "git"],
-    "system": ["sistem", "system", "cpu", "ram", "disk", "batarya", "battery", "saat", "time",
-               "bilgi", "info", "durum", "status"],
+    # NOTE: system intent is tricky: accidental misroutes can cause noisy CPU/RAM dumps.
+    # We keep lightweight keywords here, but apply additional gating in _classify_intent_fast.
+    "system": ["sistem", "system", "cpu", "ram", "disk", "batarya", "battery",
+               "durum", "status", "kullanım", "usage", "yüzde", "%"],
     "file": ["dosya", "file", "oku", "okum", "read", "yaz", "write", "kaydet", "save", "oluştur",
              "create", "listele", "list", "klasör", "folder", "dizin", "directory"],
     # ── Yeni Intentler ─────────────────────────────────────
@@ -142,6 +162,39 @@ class Orchestrator:
         self._active_tasks: dict[str, Task] = {}
 
         self.hermes_tools: list = []  # Populated dynamically per session
+
+        self._work_dir = work_dir
+        _mcp_cfg = load_mcp_settings(workspace_dir=work_dir)
+        self.mcp_manager = MCPClusterManager(_mcp_cfg)
+        self.mcp_bridge = MCPBridge(self.mcp_manager, security=self.security)
+
+    def _should_auto_use_mcp_in_chat(self, user_input: str) -> bool:
+        """Heuristic gate for MCP tool injection during normal chat."""
+        import os
+        if os.getenv("ULTRON_MCP_AUTO_INJECT", "1").strip().lower() in ("0", "false", "no", "off"):
+            return False
+        if not self.mcp_manager.enabled:
+            return False
+        if not self.mcp_bridge.has_tools():
+            return False
+
+        s = user_input.lower()
+
+        # Strong signals: explicit tooling / project inspection
+        if any(x in s for x in ("/mcp", "mcp", "tool", "araç", "server", "sunucu")):
+            return True
+        if any(x in s for x in ("dosya", "file", "klasör", "folder", "dizin", "directory", "repo", "proje", "kod tabanı", "codebase")):
+            return True
+        if any(x in s for x in ("config", "yaml", "yml", "toml", "json", "pyproject", "readme")):
+            return True
+        if any(ext in s for ext in (".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg")):
+            return True
+        if "\\" in user_input or "/" in user_input:
+            return True
+        if any(x in s for x in ("sqlite", "db", "veritaban", "database", "chroma", "log", "stack trace", "traceback")):
+            return True
+
+        return False
 
     def _init_agents(self, work_dir: str) -> None:
         """Initialize all specialized agents."""
@@ -245,6 +298,12 @@ class Orchestrator:
             await agent.start()
             logger.info("Agent started: %s", role.value)
 
+        try:
+            await self.mcp_manager.start()
+            await self.mcp_bridge.refresh_tool_catalog()
+        except Exception as e:
+            logger.warning("MCP başlatma / katalog: %s", e)
+
         # Log memory stats
         stats = self.memory.stats()
         logger.info("Memory engine: %s", stats)
@@ -252,6 +311,10 @@ class Orchestrator:
     async def stop(self) -> None:
         """Stop all agents and clean up resources."""
         self._running = False
+        try:
+            await self.mcp_manager.stop()
+        except Exception as e:
+            logger.warning("MCP durdurma: %s", e)
         for role, agent in self.agents.items():
             try:
                 await agent.stop()
@@ -281,6 +344,28 @@ class Orchestrator:
         if _depth > 10:
             logger.warning("Recursion depth exceeded (depth=%d) for input: %s", _depth, user_input[:100])
             return f"Task is too complex to process (depth limit reached). Please simplify your request."
+
+        try:
+            return await self._process_inner(user_input, context, _depth)
+        except Exception as e:
+            logger.exception("Orchestrator.process failed: %s", e)
+            return (
+                "İsteği işlerken beklenmeyen bir hata oluştu. "
+                f"Teknik ayrıntı: {e}"
+            )
+
+    async def _process_inner(
+        self,
+        user_input: str,
+        context: Optional[dict],
+        _depth: int,
+    ) -> str:
+        """process() gövdesi — üst seviyede try/except ile sarılmış."""
+        stripped = user_input.strip()
+        if stripped.lower().startswith("/mcp "):
+            user_input = stripped[5:].lstrip()
+            context = dict(context) if context else {}
+            context["intent"] = {"type": "mcp", "subtasks": [user_input]}
 
         # Get relevant lessons from memory
         lesson_context = self.memory.get_lesson_context(user_input)
@@ -321,41 +406,18 @@ class Orchestrator:
         elif intent.get("type") == "file":
             result = await self._execute_file_task(user_input, intent, lesson_context)
         elif intent.get("type") in ("rpa", "app"):
-            # HITL: Return confirmation, don't execute autonomously
-            app_or_url = ""
-            intent_type = intent.get("type", "rpa")
-            desc_lower = user_input.lower()
-            for site, url in [
-                ("youtube", "https://youtube.com"),
-                ("twitter", "https://x.com"),
-                ("reddit", "https://reddit.com"),
-                ("github", "https://github.com"),
-                ("gmail", "https://mail.google.com"),
-                ("google", "https://google.com"),
-                ("sozluk", "https://sozluk.gov.tr"),
-                ("tdk", "https://sozluk.gov.tr"),
-                ("netflix", "https://netflix.com"),
-                ("amazon", "https://amazon.com"),
-            ]:
-                if site in desc_lower:
-                    app_or_url = url
-                    break
-            if not app_or_url:
-                for app in ["steam", "chrome", "firefox", "edge", "spotify", "discord", "notepad", "vscode", "excel", "word"]:
-                    if app in desc_lower:
-                        app_or_url = app
-                        break
-
-            if app_or_url:
-                result = (
-                    f"🔒 RPA Aksiyon Onayı Gerekli\n\n"
-                    f"📋 Planlanan işlem:\n"
-                    f"  {'Tarayıcıda aç:' if app_or_url.startswith('http') else 'Uygulama başlat:'} {app_or_url}\n\n"
-                    f"⚠️ Bu işlem ekran kontrolü ve fare/klavye hareketi gerektirir.\n"
-                    f"Devam etmek istiyor musunuz? Onaylamak için 'evet' veya 'onay' yazın."
-                )
-            else:
-                result = await self._execute_rpa_task(user_input, intent, lesson_context)
+            # RPA/app tasks: execute via RPA operator.
+            # (Previously there was a HITL confirmation gate here; removed for smoother autonomy.
+            # If you want HITL back, implement it as an optional policy flag, not a hard-coded block.)
+            result = await self._execute_rpa_task(user_input, intent, lesson_context)
+        elif intent.get("type") == "autonomous":
+            result = await self._execute_autonomous_task(
+                user_input, intent, lesson_context, _depth=_depth
+            )
+        elif intent.get("type") == "gamedev":
+            result = await self._execute_gamedev_task(user_input, intent, lesson_context)
+        elif intent.get("type") == "mcp":
+            result = await self._execute_mcp_chat_task(user_input, intent, lesson_context)
         elif intent.get("type") == "multi":
             result = await self._execute_multi_task(user_input, intent, lesson_context, _depth=_depth)
         elif intent.get("type") == "email":
@@ -375,12 +437,15 @@ class Orchestrator:
             result = await self._general_chat(user_input, lesson_context)
 
         # Store interaction in memory
-        self.memory.store(
-            entry_id=f"interaction_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            content=f"User: {user_input}\nResponse: {result[:500]}",
-            entry_type="episodic",
-            metadata={"intent": intent.get("type")},
-        )
+        try:
+            self.memory.store(
+                entry_id=f"interaction_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                content=f"User: {user_input}\nResponse: {result[:500]}",
+                entry_type="episodic",
+                metadata={"intent": intent.get("type")},
+            )
+        except Exception as e:
+            logger.warning("Memory store after interaction failed: %s", e)
 
         return result
 
@@ -391,8 +456,18 @@ class Orchestrator:
         # Tokenize into words for better matching (split on whitespace and punctuation)
         tokens = set(re.findall(r'[a-zçğıöşü]+', input_lower))
 
+        # Special-case: reduce accidental "system" misroutes that cause noisy CPU/RAM dumps.
+        # Require a metric keyword *and* a query/verb signal.
+        system_metric = any(w in tokens for w in ("cpu", "ram", "disk", "batarya", "battery", "memory"))
+        system_query = any(w in tokens for w in ("durum", "status", "kullanım", "usage", "yuzde", "yüzde", "kaç", "ne", "ne kadar"))
+        if system_metric and system_query:
+            return {"type": "system", "subtasks": [user_input]}
+
         # First pass: exact word match (higher confidence)
         for intent_type, keywords in INTENT_KEYWORDS.items():
+            # system intent is handled above with extra gating
+            if intent_type == "system":
+                continue
             for kw in keywords:
                 kw_lower = kw.lower()
                 # Multi-word phrases: check as phrase in input
@@ -438,10 +513,13 @@ class Orchestrator:
                     "- 'meeting': Recording, transcribing, summarizing meetings\n"
                     "- 'file': Explicitly reading/writing/listing files or folders (user says 'read file X', 'list folder Y', 'create file Z')\n"
                     "- 'multi': Complex task requiring multiple agents\n"
+                    "- 'autonomous': User wants end-to-end completion (plan, execute steps, verify) like OpenClaw-style agent loops\n"
+                    "- 'gamedev': Unreal Engine / UE5 Blueprint, game design, gameplay systems\n"
+                    "- 'mcp': User explicitly wants MCP-backed tools (filesystem, sqlite, etc.)\n"
                     "- 'chat': General conversation, opinions, feedback, questions, explanations\n\n"
                     "Rule of thumb: If you're unsure, it's probably 'chat'. "
                     "Only use action types when the request is clearly and explicit.\n\n"
-                    'Return ONLY JSON: {"type": "code|research|rpa|email|system|clipboard|meeting|file|multi|chat", '
+                    'Return ONLY JSON: {"type": "code|research|rpa|email|system|clipboard|meeting|file|multi|autonomous|gamedev|mcp|chat", '
                     '"subtasks": ["task1", "task2"], '
                     '"requires_parallel": true/false}'
                 ),
@@ -459,6 +537,122 @@ class Orchestrator:
 
         # Default to chat
         return {"type": "chat", "subtasks": [user_input], "requires_parallel": False}
+
+    async def _execute_autonomous_task(
+        self,
+        user_input: str,
+        intent: dict,
+        lesson_context: str,
+        _depth: int,
+    ) -> str:
+        """OpenClaw-benzeri otonomi: hedef → LLM planı → Planner ile adım adım yürütme."""
+        try:
+            plan = await self.planner.create_plan(
+                user_input,
+                context={"lesson_context": lesson_context},
+                max_sub_goals=6,
+                max_steps_per_goal=8,
+            )
+            await self.planner.execute_plan(
+                plan,
+                orchestrator=self,
+                process_depth=max(_depth, 0),
+            )
+            lines: list[str] = [plan.to_readable(), "", "— Adım çıktıları —"]
+            for sg in plan.sub_goals:
+                for st in sg.steps:
+                    status = getattr(st.status, "value", str(st.status))
+                    lines.append(f"[{status}] {st.description}")
+                    if st.result:
+                        lines.append(f"  → {str(st.result)[:600]}")
+                    if st.error:
+                        lines.append(f"  ! {st.error[:400]}")
+            return "\n".join(lines)
+        except Exception as e:
+            logger.exception("Autonomous execution failed")
+            return (
+                "Otonom görev akışı tamamlanamadı. Daha küçük alt görevlere böylebilir veya "
+                f"'/research' ile bilgi toplayabilirsiniz. Ayrıntı: {e}"
+            )
+
+    async def _execute_gamedev_task(
+        self,
+        user_input: str,
+        intent: dict,
+        lesson_context: str,
+    ) -> str:
+        """UE5 / Blueprint / oyun tasarımı — paketlenmiş SKILL + LLM."""
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parent.parent.parent.parent
+        skill_md = root / "skills" / "game_dev_unreal_blueprint" / "SKILL.md"
+        bundle = (
+            skill_md.read_text(encoding="utf-8", errors="replace")
+            if skill_md.is_file()
+            else (
+                "UE5 Blueprint: Event Graph, Custom Events, Interfaces, Gameplay Tags, "
+                "Enhanced Input, Subsystems, GAS (Ability System) üst düzey kalıplar; "
+                "C++ modülü ile Blueprint köprüsü (UFUNCTION, UPROPERTY)."
+            )
+        )
+        if lesson_context:
+            bundle = f"{bundle}\n\nGeçmiş dersler / bağlam:\n{lesson_context[:2000]}"
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Sen kıdemli bir oyun mühendisisin (Unreal Engine 5, Blueprint, performans, "
+                    "çok oyunculu mimari). Türkçe yanıt ver; kod ve node isimlerini İngilizce UE API "
+                    "ile tutarlı kullan. Aşağıdaki dahili rehbere uy:\n\n"
+                    f"{bundle[:14000]}"
+                ),
+            },
+            {"role": "user", "content": user_input},
+        ]
+        try:
+            response = await self.llm_router.chat(messages, temperature=0.35, max_tokens=4096)
+            return response.content
+        except Exception as e:
+            logger.warning("Game dev LLM path failed: %s", e)
+            return f"Oyun geliştirme yanıtı üretilemedi: {e}"
+
+    async def _execute_mcp_chat_task(
+        self,
+        user_input: str,
+        intent: dict,
+        lesson_context: str,
+    ) -> str:
+        """MCP araçları + LLMRouter çok tur tool döngüsü (`/mcp ...`)."""
+        if not self.mcp_bridge.has_tools():
+            err = self.mcp_manager.errors
+            return (
+                "MCP araçları kullanılamıyor. `config/mcp.yaml` dosyasını oluşturun "
+                "(şablon: `config/mcp.template.yaml`), `enabled: true` yapın ve "
+                "`npx`/Node ile örn. `@modelcontextprotocol/server-filesystem` tanımlayın. "
+                f"Sunucu hataları: {err or 'yok'}"
+            )
+        sys_parts = [
+            "Yerel MCP sunucularından gelen araçları kullanarak yanıtla.",
+            "Türkçe özet ver; dosya yollarında workspace sınırlarına uy.",
+        ]
+        if lesson_context:
+            sys_parts.append(f"Bağlam:\n{lesson_context[:4000]}")
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": "\n\n".join(sys_parts)},
+            {"role": "user", "content": user_input},
+        ]
+        try:
+            r = await self.llm_router.chat_with_mcp_tool_loop(
+                messages,
+                self.mcp_bridge,
+                max_tool_rounds=8,
+                temperature=0.25,
+                max_tokens=4096,
+            )
+            return (r.content or "").strip() or "(MCP yanıtı boş)"
+        except Exception as e:
+            logger.exception("MCP sohbet akışı")
+            return f"MCP / LLM araç döngüsü hatası: {e}"
 
     async def _execute_code_task(
         self,
@@ -520,8 +714,13 @@ class Orchestrator:
         import webbrowser
 
         # Extract city name
-        city_match = re.search(r"(?:hava\s+durumu|weather|sıcaklık)\s+(?:nedir\s+)?(?:([^,]+?))?\s*$", user_input, re.IGNORECASE)
-        city = city_match.group(1).strip() if city_match and city_match.group(1) else ""
+        city_match = re.search(
+            r"(?:hava\s+durumu|weather|sıcaklık)\s+(?:nedir\s+)?(?:([^,]+?))?\s*$",
+            user_input,
+            re.IGNORECASE,
+        )
+        g1 = city_match.group(1) if city_match else None
+        city = (g1 or "").strip() if city_match else ""
 
         # Common Turkish cities if not extracted
         if not city:
@@ -558,8 +757,11 @@ class Orchestrator:
             parts.append(f"💾 RAM: {mem.percent}% kullanım ({mem.used // (1024**3)}/{mem.total // (1024**3)} GB)")
 
         if any(kw in input_lower for kw in ["disk", "depolama", "storage"]):
-            disk = psutil.disk_usage('/')
-            parts.append(f"💿 Disk: {disk.percent}% kullanım ({disk.used // (1024**3)}/{disk.total // (1024**3)} GB)")
+            try:
+                disk = psutil.disk_usage(_default_disk_usage_path())
+                parts.append(f"💿 Disk: {disk.percent}% kullanım ({disk.used // (1024**3)}/{disk.total // (1024**3)} GB)")
+            except Exception as e:
+                parts.append(f"💿 Disk: okunamadı ({e})")
 
         if any(kw in input_lower for kw in ["saat", "time", "tarih", "date"]):
             parts.append(f"🕐 Şu an: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}")
@@ -576,10 +778,14 @@ class Orchestrator:
         if not parts:
             cpu = psutil.cpu_percent(interval=0)
             mem = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            try:
+                disk = psutil.disk_usage(_default_disk_usage_path())
+                disk_line = f"💿 Disk: {disk.percent}% ({disk.used // (1024**3)}/{disk.total // (1024**3)} GB)"
+            except Exception as e:
+                disk_line = f"💿 Disk: okunamadı ({e})"
             parts.append(f"🖥 CPU: %{cpu}")
             parts.append(f"💾 RAM: {mem.percent}% ({mem.used // (1024**3)}/{mem.total // (1024**3)} GB)")
-            parts.append(f"💿 Disk: {disk.percent}% ({disk.used // (1024**3)}/{disk.total // (1024**3)} GB)")
+            parts.append(disk_line)
             parts.append(f"🕐 Saat: {datetime.now().strftime('%H:%M:%S')}")
 
         return "\n".join(parts)
@@ -648,8 +854,13 @@ class Orchestrator:
         if intent_type == "weather":
             # Extract city from input
             import re
-            city_match = re.search(r"(?:hava\s+durumu|weather)\s+(?:nedir\s+)?(?:([^,]+?))?\s*$", user_input, re.IGNORECASE)
-            city = city_match.group(1).strip() if city_match else user_input
+            city_match = re.search(
+                r"(?:hava\s+durumu|weather)\s+(?:nedir\s+)?(?:([^,]+?))?\s*$",
+                user_input,
+                re.IGNORECASE,
+            )
+            g1 = city_match.group(1) if city_match else None
+            city = (g1 or "").strip() if city_match and (g1 or "").strip() else user_input.strip()
             ctx = {"action": "weather", "city": city}
         elif intent_type == "app":
             ctx = {"action": "auto"}
@@ -765,8 +976,12 @@ class Orchestrator:
                     + "\n\n".join(results),
                 },
             ]
-            response = await self.llm_router.chat(synthesis_messages, max_tokens=2048)
-            return response.content
+            try:
+                response = await self.llm_router.chat(synthesis_messages, max_tokens=2048)
+                return response.content
+            except Exception as e:
+                logger.warning("Multi-task synthesis LLM failed: %s", e)
+                return "\n\n".join(results)
 
         return results[0] if results else "No results"
 
@@ -827,6 +1042,7 @@ class Orchestrator:
     async def _general_chat(self, user_input: str, lesson_context: str) -> str:
         """Chat response with prompt.txt, conversation history, and lesson context."""
         from pathlib import Path
+        import os
 
         # Load prompt.txt
         prompt_file = Path(__file__).parent / "prompt.txt"
@@ -875,7 +1091,28 @@ class Orchestrator:
             {"role": "user", "content": user_input},
         ]
 
-        response = await self.llm_router.chat(messages, temperature=0.3, max_tokens=1024)
+        try:
+            # Dynamic MCP injection (normal chat brain can self-initiate tool calls)
+            if self._should_auto_use_mcp_in_chat(user_input):
+                policy = [
+                    "MCP araçları mevcutsa, kullanıcı niyetine göre GEREKİRSE çağırabilirsin.",
+                    "Gerekmiyorsa tool çağırma; normal sohbet yanıtı ver.",
+                    "GÜVENLİK: Path işlemleri sadece izinli workspace/data kökleri içinde olmalı; şüpheli path isteğinde reddet.",
+                    "Yanıtı Türkçe ve öz ver.",
+                ]
+                messages[0]["content"] += "\n\n" + "\n".join(policy)
+                response = await self.llm_router.chat_with_mcp_tool_loop(
+                    messages,
+                    self.mcp_bridge,
+                    max_tool_rounds=int(os.getenv("ULTRON_MCP_MAX_TOOL_ROUNDS", "6")),
+                    temperature=0.25,
+                    max_tokens=2048,
+                )
+            else:
+                response = await self.llm_router.chat(messages, temperature=0.3, max_tokens=1024)
+        except Exception as e:
+            logger.error("General chat LLM failed: %s", e)
+            return f"Model şu anda yanıt veremedi. Lütfen API anahtarlarını veya Ollama bağlantısını kontrol edin. Ayrıntı: {e}"
 
         # CRITICAL: Validate response language — reject if contains Chinese characters
         import re
@@ -883,15 +1120,21 @@ class Orchestrator:
             # Regenerate with stricter language enforcement
             messages[0]["content"] += "\n\nCRITICAL: Your previous response contained non-Turkish characters. " \
                 "Regenerate the ENTIRE response in Turkish ONLY."
-            response = await self.llm_router.chat(messages, temperature=0.1, max_tokens=1024)
+            try:
+                response = await self.llm_router.chat(messages, temperature=0.1, max_tokens=1024)
+            except Exception as e:
+                logger.warning("Regeneration after language check failed: %s", e)
 
         # Store this interaction for future context
-        self.memory.store(
-            entry_id=f"chat_{int(datetime.now().timestamp())}",
-            content=f"User: {user_input}\nUltron: {response.content[:500]}",
-            entry_type="episodic",
-            metadata={"type": "chat"},
-        )
+        try:
+            self.memory.store(
+                entry_id=f"chat_{int(datetime.now().timestamp())}",
+                content=f"User: {user_input}\nUltron: {response.content[:500]}",
+                entry_type="episodic",
+                metadata={"type": "chat"},
+            )
+        except Exception as e:
+            logger.warning("Memory store after chat failed: %s", e)
 
         return response.content
 
@@ -915,4 +1158,10 @@ class Orchestrator:
             "planner": self.planner.get_stats(),
             "security": self.security.get_stats(),
             "self_improvement": self.self_improvement.get_stats(),
+            "mcp": {
+                "enabled": self.mcp_manager.enabled,
+                "running_servers": self.mcp_manager.list_server_ids(),
+                "tool_count": len(self.mcp_bridge.openai_tools()),
+                "errors": self.mcp_manager.errors,
+            },
         }

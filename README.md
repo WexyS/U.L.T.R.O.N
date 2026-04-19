@@ -18,7 +18,7 @@
 </p>
 
 <p>
-  <strong>Personal, locally-hosted, multi-agent AI assistant with autonomous web browsing, knowledge graph building, and a modern interface that surpasses Claude, Gemini, and ChatGPT.</strong>
+  <strong>Personal, locally-hosted, multi-agent AI assistant with autonomous workflows, web research, tool use, and a modern interface.</strong>
 </p>
 
 <p>
@@ -28,7 +28,7 @@
   <a href="#-11-specialized-agents"><strong>Agents</strong></a> •
   <a href="#-autonomous-learning"><strong>Autonomous Learning</strong></a> •
   <a href="#-ui-features"><strong>UI Features</strong></a> •
-  <a href="#-comparison-with-leading-ai-assistants"><strong>Comparison</strong></a> •
+  <a href="#-mcp-tool-bridge-dynamic-tool-injection"><strong>MCP</strong></a> •
   <a href="#-api-reference"><strong>API</strong></a>
 </p>
 
@@ -38,17 +38,12 @@
 
 ## ✨ What Makes Ultron Unique
 
-**Ultron is not just another AI wrapper.** It's a fully autonomous system that can:
+Ultron is a multi-agent assistant designed for **local-first workflows**, **tool use**, and **extensible integrations**:
 
-| Capability | Ultron | Claude | ChatGPT | Gemini |
-|------------|--------|--------|---------|--------|
-| **Autonomous web browsing** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Self-directed learning** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Run code from chat** | ✅ JS/HTML/Python | ❌ No | ⚠️ Limited | ❌ No |
-| **Build knowledge graphs** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Identify knowledge gaps** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Persistent local memory** | ✅ Yes | ⚠️ Server | ⚠️ Server | ⚠️ Server |
-| **100% privacy** | ✅ Local | ❌ Cloud | ❌ Cloud | ❌ Cloud |
+- **Multi-agent orchestration**: route tasks to specialized agents (code, research, RPA, email, files, monitoring).
+- **Tool-assisted reasoning**: structured tool loops (MCP + internal tools) when the task benefits from it.
+- **Local memory**: persistent storage for lessons and episodic context.
+- **Safety & policy gates**: allowlists for file roots, optional server gates for MCP, and rate limiting/audit logging.
 
 ---
 
@@ -82,6 +77,37 @@
 - **Auto Launchers**: Self-healing boot sequence that detects missing dependencies and automatically launches GUI companions like VoiceBox on startup.
 - **OpenGuider Companion**: Native vision streaming and contextual assistance on Windows/Mac via OpenGuider UI protocol.
 - **Multi-Agent Debate**: When facing complex decisions, ask Ultron to *"debate"* it; it will instantiate an Advocate, Critic, and Judge personas to rigorously argue technical trade-offs before synthesizing an optimal final response.
+
+---
+
+## 🔌 MCP Tool Bridge (Dynamic Tool Injection)
+
+Ultron includes an MCP bridge (`ultron/v2/mcp/bridge.py`) and can **dynamically inject MCP tools into the main chat loop** when the user’s intent suggests that tools would help (e.g., inspecting files/configs/logs, querying local services).
+
+- **Explicit mode**: `/mcp <your request>` routes directly to an MCP tool loop.
+- **Dynamic injection**: normal chat can automatically enter an MCP tool loop when needed (configurable).
+
+### Security policy (server/path)
+
+- **Server allowlist**: restrict which MCP servers can be used
+  - `ULTRON_MCP_ALLOWED_SERVERS=fs,sqlite`
+- **Path allowlist**: file operations are restricted to allowed roots (see `SecurityManager` in `ultron/v2/core/security.py`).
+
+### Environment toggles
+
+- `ULTRON_MCP_AUTO_INJECT=1` (default) — enable dynamic MCP injection in general chat
+- `ULTRON_MCP_MAX_TOOL_ROUNDS=6` — max tool rounds for the tool loop
+
+---
+
+## 🎙️ Voice & Local Service URLs
+
+Some Windows setups resolve `localhost` via IPv6 and may trigger intermittent “network error” symptoms for local companion services.
+Ultron supports overriding local URLs via environment variables:
+
+- `OLLAMA_BASE_URL=http://127.0.0.1:11434`
+- `ULTRON_VOICEBOX_URL=http://127.0.0.1:17493`
+- `ULTRON_WORKSPACE_URL=http://127.0.0.1:8000`
 
 ### 🌐 13 AI Providers with Smart Routing
 | Priority | Provider | Type | Best For |

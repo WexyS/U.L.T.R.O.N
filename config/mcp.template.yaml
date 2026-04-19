@@ -1,0 +1,18 @@
+# Ultron MCP — stdio sunucuları (config/mcp.yaml olarak kopyalayın)
+# Yer tutucular: {{WORKSPACE}}, {{PROJECT_ROOT}}
+#
+# Örnek: Node + resmi filesystem sunucusu
+#   npx -y @modelcontextprotocol/server-filesystem {{WORKSPACE}}
+
+mcp:
+  enabled: false
+  servers:
+    # - id: fs
+    #   command: npx
+    #   args: ["-y", "@modelcontextprotocol/server-filesystem", "{{WORKSPACE}}"]
+    #   disabled: false
+    #
+    # - id: sqlite
+    #   command: npx
+    #   args: ["-y", "@modelcontextprotocol/server-sqlite", "{{WORKSPACE}}/ultron.db"]
+    #   disabled: true

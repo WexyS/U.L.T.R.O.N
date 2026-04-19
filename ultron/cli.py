@@ -47,11 +47,13 @@ def _init_v2_sync(config: UltronConfig):
     console.print("[dim]Orchestrator başlatılıyor...[/dim]")
     orch = Orchestrator(llm_router=llm, memory=memory, work_dir="./workspace")
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    for agent in orch.agents.values():
-        loop.run_until_complete(agent.start())
-    loop.close()
+    async def _bootstrap() -> None:
+        try:
+            await orch.start()
+        except Exception as exc:
+            console.print(f"[yellow]⚠[/] Orchestrator start: {exc}")
+
+    asyncio.run(_bootstrap())
 
     providers = llm.get_healthy_providers()
     console.print(f"[green]✓[/] Providers: {', '.join(providers)}")
@@ -100,11 +102,10 @@ async def async_main(config: UltronConfig) -> None:
     memory = MemoryEngine(persist_dir="./data/memory_v2")
     orch = Orchestrator(llm_router=llm, memory=memory, work_dir="./workspace")
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    for agent in orch.agents.values():
-        loop.run_until_complete(agent.start())
-    loop.close()
+    try:
+        await orch.start()
+    except Exception as exc:
+        console.print(f"[yellow]⚠[/] Orchestrator start: {exc}")
 
     console.print("[green]✓[/] Ultron v2.0 hazır. Yazmaya başlayın (/quit ile çıkış)\n")
 

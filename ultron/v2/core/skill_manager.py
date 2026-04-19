@@ -4,10 +4,61 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _extra_skill_search_dirs() -> list[Path]:
+    """OpenClaw / ClawHub tarzı ek dizinler: workspace, data, env."""
+    extra: list[Path] = []
+    raw = (os.environ.get("ULTRON_SKILLS_PATH") or "").strip()
+    if raw:
+        for part in raw.split(os.pathsep):
+            p = Path(part.strip()).expanduser()
+            if p.parts:
+                extra.append(p)
+    here = Path(__file__).resolve()
+    project_root = here.parent.parent.parent.parent
+    extra.extend(
+        [
+            project_root / "workspace" / "skills",
+            project_root / "data" / "openclaw_skills",
+            project_root / "skills",
+        ]
+    )
+    return extra
+
+
+def _skills_from_manifest(manifest_path: Path) -> list[dict]:
+    """JSON manifest: [{"name": "...", "path": "...", "description": "..."}, ...]"""
+    out: list[dict] = []
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8", errors="replace"))
+    except Exception as e:
+        logger.warning("Skill manifest okunamadı %s: %s", manifest_path, e)
+        return out
+    if not isinstance(data, list):
+        return out
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("id")
+        path = item.get("path") or item.get("dir")
+        if not name or not path:
+            continue
+        p = Path(str(path)).expanduser()
+        out.append(
+            {
+                "name": str(name),
+                "description": str(item.get("description", item.get("summary", "")))[:500],
+                "path": str(p),
+                "source": f"manifest:{manifest_path.name}",
+            }
+        )
+    return out
 
 
 def discover_all_skills() -> list[dict]:
@@ -17,6 +68,7 @@ def discover_all_skills() -> list[dict]:
         Path.home() / ".qwen" / "skills",
         Path(__file__).parent.parent.parent / "skills",
         Path(__file__).parent.parent / "skills",
+        *_extra_skill_search_dirs(),
     ]
 
     for search_dir in search_dirs:
@@ -52,7 +104,29 @@ def discover_all_skills() -> list[dict]:
                 except Exception as e:
                     logger.debug("Failed to read skill file %s: %s", item.name, e)
 
+    manifest = (os.environ.get("ULTRON_SKILLS_MANIFEST") or "").strip()
+    if manifest:
+        mp = Path(manifest).expanduser()
+        if mp.is_file():
+            for s in _skills_from_manifest(mp):
+                if s["name"] not in {x["name"] for x in skills}:
+                    skills.append(s)
+
     return skills
+
+
+def _extra_agent_search_dirs() -> list[Path]:
+    extra: list[Path] = []
+    raw = (os.environ.get("ULTRON_AGENTS_PATH") or "").strip()
+    if raw:
+        for part in raw.split(os.pathsep):
+            p = Path(part.strip()).expanduser()
+            if p.parts:
+                extra.append(p)
+    here = Path(__file__).resolve()
+    root = here.parent.parent.parent.parent
+    extra.extend([root / "workspace" / "agents", root / "data" / "openclaw_agents"])
+    return extra
 
 
 def discover_all_agents() -> list[dict]:
@@ -62,6 +136,7 @@ def discover_all_agents() -> list[dict]:
         Path.home() / ".qwen" / "agents",
         Path(__file__).parent.parent.parent / "agents",
         Path(__file__).parent.parent / "agents",
+        *_extra_agent_search_dirs(),
     ]
 
     for search_dir in search_dirs:

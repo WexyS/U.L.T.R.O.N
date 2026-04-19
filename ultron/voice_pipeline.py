@@ -23,7 +23,20 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Yapilandirma
 # ──────────────────────────────────────────────────────────────────────────────
-OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+def _env_url(key: str, default: str) -> str:
+    """Normalize local service URLs.
+
+    On Windows, `localhost` may resolve to IPv6 and break some stacks.
+    Prefer 127.0.0.1 by default.
+    """
+    raw = (os.environ.get(key) or "").strip()
+    if raw:
+        return raw.rstrip("/")
+    return default.rstrip("/")
+
+OLLAMA_URL = _env_url("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+VOICEBOX_URL = _env_url("ULTRON_VOICEBOX_URL", "http://127.0.0.1:17493")
+WORKSPACE_URL = _env_url("ULTRON_WORKSPACE_URL", "http://127.0.0.1:8000")
 MODEL = os.environ.get("ULTRON_MODEL", "qwen2.5:14b")
 STT_ENGINE = os.environ.get("ULTRON_STT", "google")
 LANGUAGE = os.environ.get("ULTRON_LANGUAGE", "en")  # "en" or "tr"
@@ -652,9 +665,7 @@ class VoiceBoxTTS:
         try:
             # 1. Try VoiceBox
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post("http://localhost:17493/generate", json={
-                    "text": clean, "language": self.language
-                })
+                resp = await client.post(f"{VOICEBOX_URL}/generate", json={"text": clean, "language": self.language})
                 if resp.status_code == 200:
                     with open(tmp.name, "wb") as f:
                         f.write(resp.content)
@@ -1141,7 +1152,11 @@ class VoicePipeline:
         if not url:
             return "URL belirtilmedi."
         try:
-            response = requests.post("http://localhost:8000/api/v2/workspace/clone", json={"url": url, "extract_components": True}, timeout=60)
+            response = requests.post(
+                f"{WORKSPACE_URL}/api/v2/workspace/clone",
+                json={"url": url, "extract_components": True},
+                timeout=60,
+            )
             if response.status_code == 200:
                 return f"{url} basariyla klonlandi ve bilesenlerine ayrildi."
             return f"Klonlama basarisiz: {response.text}"
@@ -1154,7 +1169,11 @@ class VoicePipeline:
         if not idea:
             return "Fikir belirtilmedi."
         try:
-            response = requests.post("http://localhost:8000/api/v2/workspace/generate", json={"idea": idea, "tech_stack": "html-css-js"}, timeout=120)
+            response = requests.post(
+                f"{WORKSPACE_URL}/api/v2/workspace/generate",
+                json={"idea": idea, "tech_stack": "html-css-js"},
+                timeout=120,
+            )
             if response.status_code == 200:
                 return f"Uygulama basariyla uretildi: {idea}. Ayrintilar workspace dizininde."
             return f"Uretim basarisiz: {response.text}"
