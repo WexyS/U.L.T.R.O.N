@@ -3,11 +3,19 @@ import { Settings, Trash2, MessageSquare, Globe, Activity, Zap, Bot, MessageCirc
 type ActivePanel = 'chat' | 'workspace' | 'agents' | 'training';
 
 interface SidebarProps {
-  status: string;
+  status: unknown;
   onClear: () => void;
   activePanel: ActivePanel;
   onPanelChange: (panel: ActivePanel) => void;
   onToggleConversationSidebar?: () => void;
+}
+
+function getStatusLabel(status: unknown): string {
+  if (!status) return 'Ready';
+  if (typeof status === 'string') return status;
+  if (status && typeof status === 'object' && 'running' in status && (status as Record<string, unknown>).running) return 'Online';
+  if (status && typeof status === 'object' && 'error' in status && (status as Record<string, unknown>).error) return 'Error';
+  return 'Ready';
 }
 
 export default function Sidebar({ status, onClear, activePanel, onPanelChange, onToggleConversationSidebar }: SidebarProps) {
@@ -81,7 +89,7 @@ export default function Sidebar({ status, onClear, activePanel, onPanelChange, o
       <div className="px-3 py-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
         <div className="px-3 py-2 rounded-lg" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
           <p className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>Status</p>
-          <p className="text-sm font-medium capitalize" style={{ color: 'var(--color-text)' }}>{status || 'Ready'}</p>
+          <p className="text-sm font-medium capitalize" style={{ color: 'var(--color-text)' }}>{getStatusLabel(status)}</p>
         </div>
       </div>
 
@@ -111,6 +119,10 @@ export default function Sidebar({ status, onClear, activePanel, onPanelChange, o
         <button
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:opacity-80"
           style={{ color: 'var(--color-text-secondary)' }}
+          aria-label="Settings (coming soon)"
+          title="Settings (coming soon)"
+          aria-disabled
+          onClick={() => alert('Settings panel coming soon!')}
         >
           <Settings className="w-5 h-5" />
           <span className="font-medium">Settings</span>

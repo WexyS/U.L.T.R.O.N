@@ -312,28 +312,85 @@ class CoderAgent(Agent):
         return code
 
     def _is_code_safe(self, code: str) -> bool:
-        """Basic safety check for dangerous patterns."""
-        dangerous_patterns = [
-            "__import__('os')",
-            "__import__('subprocess')",
-            "os.system(",
-            "os.popen(",
-            "subprocess.call(",
-            "subprocess.run(",
-            "eval(",
-            "exec(",
-            "compile(",
-            "import shutil",
-            "shutil.rmtree",
-            "rm -rf",
+        """Security-critical: Block dangerous patterns before execution.
+
+        Uses AST analysis (not just string matching) to detect dangerous operations.
+        This prevents simple obfuscation bypasses like getattr(os, 'system')('cmd').
+        """
+        import ast
+
+        # Phase 1: AST-based analysis (harder to bypass)
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # If we can't parse it, don't run it
+            logger.warning("BLOCKED: Code has syntax errors, not executing")
+            return False
+
+        # Dangerous module names
+        dangerous_modules = {
+            "os", "subprocess", "shutil", "sys", "ctypes",
+            "importlib", "pty", "socket", "http.server",
+            "xmlrpc", "pickle", "shelve", "tempfile",
+        }
+
+        # Dangerous function/attribute names
+        dangerous_calls = {
+            "eval", "exec", "compile", "__import__",
+            "getattr", "setattr", "delattr",
+            "globals", "locals", "vars",
+            "open",  # Allow only if we enable file I/O explicitly
+        }
+
+        # Dangerous attribute accesses
+        dangerous_attrs = {
+            "system", "popen", "remove", "unlink", "rmtree",
+            "removedirs", "rename", "makedirs",
+            "Popen", "call", "check_output", "check_call", "run",
+            "connect", "bind", "listen", "accept",
+            "spawn", "dup2",
+            "urlopen", "urlretrieve",
+        }
+
+        for node in ast.walk(tree):
+            # Check imports
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    module_root = alias.name.split(".")[0]
+                    if module_root in dangerous_modules:
+                        logger.warning("BLOCKED: Dangerous import: %s", alias.name)
+                        return False
+
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    module_root = node.module.split(".")[0]
+                    if module_root in dangerous_modules:
+                        logger.warning("BLOCKED: Dangerous import from: %s", node.module)
+                        return False
+
+            # Check function calls
+            elif isinstance(node, ast.Call):
+                func = node.func
+                # Direct call: eval(), exec(), etc.
+                if isinstance(func, ast.Name) and func.id in dangerous_calls:
+                    logger.warning("BLOCKED: Dangerous call: %s()", func.id)
+                    return False
+                # Attribute call: os.system(), subprocess.Popen(), etc.
+                if isinstance(func, ast.Attribute) and func.attr in dangerous_attrs:
+                    logger.warning("BLOCKED: Dangerous attribute call: .%s()", func.attr)
+                    return False
+
+        # Phase 2: Final string-level checks for non-Python patterns
+        string_blocklist = [
+            "rm -rf", "curl ", "wget ", "bash -c",
+            "powershell ", "cmd.exe", "pty.spawn",
         ]
-        # Allow these in a controlled environment but log them
-        for pattern in dangerous_patterns:
+        for pattern in string_blocklist:
             if pattern in code:
-                logger.warning("Potentially dangerous pattern found: %s", pattern)
-                # In a trusted environment, we allow these but still log
-                pass
-        return True  # Allow all in controlled workspace
+                logger.warning("BLOCKED: Dangerous string pattern: %s", pattern)
+                return False
+
+        return True
 
     @staticmethod
     def _ext_for_language(language: str) -> str:

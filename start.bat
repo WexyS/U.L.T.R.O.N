@@ -1,10 +1,10 @@
 @echo off
-title Ultron v2.1 — CLI Launcher
-color 0A
+title Ultron v2.1 — Desktop GUI Launcher
+color 4C
 echo.
 echo ============================================================
-echo  Ultron v2.1 — Personal AI Assistant (CLI)
-echo  Multi-Agent | Self-Healing | 13 AI Providers | Voice
+echo  Ultron v2.1 — Personal AI Assistant (Desktop GUI)
+echo  Multi-Agent - Voice Control - System Monitor
 echo ============================================================
 echo.
 
@@ -43,9 +43,10 @@ if %errorlevel% neq 0 (
     echo      Model ready.
 )
 
-:: Launch CLI
-echo [4/4] Starting Ultron CLI...
+:: Launch Desktop GUI
+echo [4/4] Starting Ultron Desktop Interface...
 echo.
-"%~dp0.venv\Scripts\python.exe" -m ultron.cli --cli
+set PYTHONPATH="%~dp0"
+"%~dp0.venv\Scripts\python.exe" -m ultron.desktop.app
 echo.
 pause

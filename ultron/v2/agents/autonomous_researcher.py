@@ -382,13 +382,19 @@ class AutonomousWebResearcher(Agent):
 
     async def _search_topic(self, topic: str) -> list[str]:
         """Search for a topic and return URLs."""
-        from duckduckgo_search import AsyncDDGS
+        import asyncio
+        from duckduckgo_search import DDGS
         
         urls = []
         try:
-            async with AsyncDDGS() as ddgs:
-                async for result in ddgs.text(topic, max_results=10):
-                    urls.append(result["href"])
+            def sync_search():
+                res = []
+                with DDGS() as ddgs:
+                    for result in ddgs.text(topic, max_results=10):
+                        res.append(result["href"])
+                return res
+                
+            urls = await asyncio.to_thread(sync_search)
         except Exception as e:
             logger.warning("DuckDuckGo search failed: %s", e)
             # Fallback to predefined sources

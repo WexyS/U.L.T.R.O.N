@@ -121,11 +121,37 @@ export function useUltron({
     return () => clearInterval(interval);
   }, [apiUrl]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN || 
         wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     try {
+      // Pre-flight: check if backend is reachable before opening WebSocket
+      try {
+        const healthRes = await fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(3000) });
+        if (!healthRes.ok) {
+          console.log('[Ultron] Backend not ready yet, retrying...');
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            const delay = Math.min(reconnectInterval * Math.pow(1.5, reconnectAttempts.current), 30000);
+            reconnectTimeout.current = setTimeout(() => {
+              reconnectAttempts.current++;
+              connect();
+            }, delay);
+          }
+          return;
+        }
+      } catch {
+        console.log('[Ultron] Backend not reachable, retrying...');
+        if (reconnectAttempts.current < maxReconnectAttempts) {
+          const delay = Math.min(reconnectInterval * Math.pow(1.5, reconnectAttempts.current), 30000);
+          reconnectTimeout.current = setTimeout(() => {
+            reconnectAttempts.current++;
+            connect();
+          }, delay);
+        }
+        return;
+      }
+
       console.log('[Ultron] Attempting WebSocket connection to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

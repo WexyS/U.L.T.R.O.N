@@ -93,10 +93,14 @@ class RPAOperatorAgent(Agent):
 
     def _init_easyocr(self):
         if self._easyocr is None:
-            import easyocr
-            # Initialize once (loading is slow)
-            self._easyocr = easyocr.Reader(["en", "tr"], gpu=True)
-            logger.info("EasyOCR initialized (GPU enabled)")
+            try:
+                import easyocr
+                # Initialize once (loading is slow)
+                self._easyocr = easyocr.Reader(["en", "tr"], gpu=True)
+                logger.info("EasyOCR initialized (GPU enabled)")
+            except Exception as e:
+                logger.warning(f"EasyOCR initialization failed, falling back to None. Error: {e}")
+                self._easyocr = None
         return self._easyocr
 
     async def execute(self, task: Task) -> TaskResult:
@@ -201,6 +205,8 @@ class RPAOperatorAgent(Agent):
 
         filepath = screenshots[-1]
         reader = self._init_easyocr()
+        if reader is None:
+            return TaskResult(task_id=task.id, status=TaskStatus.FAILED, error="EasyOCR could not be initialized.")
         results = reader.readtext(str(filepath))
 
         # Extract text
@@ -307,62 +313,143 @@ class RPAOperatorAgent(Agent):
             tool_calls=[ToolCall(name="drag_drop", arguments={"from": [x1, y1], "to": [x2, y2]}, success=True)],
         )
 
-    async def _launch_app(self, task: Task) -> TaskResult:
-        """Launch an app or open a website."""
+    # SECURITY: Whitelist of allowed executables — prevents shell injection
+    SAFE_APP_MAP: dict[str, str] = {
+        "steam": "steam",
+        "chrome": "chrome",
+        "google chrome": "chrome",
+        "firefox": "firefox",
+        "edge": "msedge",
+        "opera": "opera",
+        "spotify": "spotify",
+        "discord": "discord",
+        "notepad": "notepad",
+        "calculator": "calc",
+        "calc": "calc",
+        "task manager": "taskmgr",
+        "paint": "mspaint",
+        "explorer": "explorer",
+        "cmd": "cmd",
+        "terminal": "wt",
+        "vscode": "code",
+        "visual studio code": "code",
+        "pycharm": "pycharm",
+        "intellij": "idea",
+        "word": "winword",
+        "excel": "excel",
+        "powerpoint": "powerpnt",
+        "outlook": "outlook",
+        "teams": "teams",
+        "mail": "outlook",
+    }
+
+    SAFE_SITE_MAP: dict[str, str] = {
+        "youtube": "https://youtube.com",
+        "youtube.com": "https://youtube.com",
+        "twitter": "https://x.com",
+        "x.com": "https://x.com",
+        "x": "https://x.com",
+        "reddit": "https://reddit.com",
+        "github": "https://github.com",
+        "gmail": "https://mail.google.com",
+        "google": "https://google.com",
+        "sozluk": "https://sozluk.gov.tr",
+        "sozluk.gov.tr": "https://sozluk.gov.tr",
+        "tdk": "https://sozluk.gov.tr",
+        "netflix": "https://netflix.com",
+        "amazon": "https://amazon.com",
+    }
+
+    def _safe_launch_executable(self, exe_name: str) -> bool:
+        """Launch a whitelisted executable safely — NO shell=True, NO user input in cmd."""
         import subprocess
+        import shutil
+
+        # Validate: exe_name must be in our whitelist values
+        allowed_exes = set(self.SAFE_APP_MAP.values())
+        if exe_name not in allowed_exes:
+            logger.warning("BLOCKED: Attempted to launch non-whitelisted executable: %s", exe_name)
+            return False
+
+        # Find the executable on PATH
+        exe_path = shutil.which(exe_name)
+        if exe_path:
+            # SECURITY: shell=False, direct executable path, no user input
+            subprocess.Popen([exe_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+
+        # Fallback: use os.startfile on Windows for known apps
+        import os
+        try:
+            os.startfile(exe_name)
+            return True
+        except Exception:
+            return False
+
+    def _resolve_app_name(self, description: str) -> tuple[str | None, str | None]:
+        """Resolve a natural language description to a safe exe name and/or URL.
+
+        Returns (exe_name_or_None, url_or_None).
+        """
+        desc_lower = description.lower()
+        resolved_exe = None
+        resolved_url = None
+
+        # Check websites first
+        for site, url in self.SAFE_SITE_MAP.items():
+            if site in desc_lower:
+                resolved_url = url
+                break
+
+        # Check apps
+        for app, exe in self.SAFE_APP_MAP.items():
+            if app in desc_lower:
+                resolved_exe = exe
+                break
+
+        return resolved_exe, resolved_url
+
+    async def _launch_app(self, task: Task) -> TaskResult:
+        """Launch an app or open a website — whitelist-based, no shell injection."""
         import webbrowser
 
         app_name = task.context.get("app_name", "") or task.description
-        app_lower = app_name.lower()
+        resolved_exe, resolved_url = self._resolve_app_name(app_name)
 
-        # Check if it's a website/URL
-        site_urls = {
-            "youtube": "https://youtube.com",
-            "youtube.com": "https://youtube.com",
-            "twitter": "https://x.com",
-            "x.com": "https://x.com",
-            "x": "https://x.com",
-            "reddit": "https://reddit.com",
-            "github": "https://github.com",
-            "gmail": "https://mail.google.com",
-            "google": "https://google.com",
-            "netflix": "https://netflix.com",
-            "amazon": "https://amazon.com",
-        }
+        # Try website first
+        if resolved_url:
+            try:
+                webbrowser.open(resolved_url)
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.SUCCESS,
+                    output=f"✅ {resolved_url} tarayıcıda açıldı.",
+                    tool_calls=[ToolCall(name="launch_app", arguments={"url": resolved_url}, success=True)],
+                )
+            except Exception as e:
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.FAILED,
+                    error=f"Tarayıcı açılamadı: {e}",
+                )
 
-        for site, url in site_urls.items():
-            if site in app_lower:
-                try:
-                    webbrowser.open(url)
-                    return TaskResult(
-                        task_id=task.id,
-                        status=TaskStatus.SUCCESS,
-                        output=f"✅ {site.capitalize()} tarayıcıda açıldı.",
-                        tool_calls=[ToolCall(name="launch_app", arguments={"url": url}, success=True)],
-                    )
-                except Exception as e:
-                    return TaskResult(
-                        task_id=task.id,
-                        status=TaskStatus.FAILED,
-                        error=f"Tarayıcı açılamadı: {e}",
-                    )
+        # Try safe app launch
+        if resolved_exe:
+            success = self._safe_launch_executable(resolved_exe)
+            if success:
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.SUCCESS,
+                    output=f"✅ {resolved_exe} açıldı.",
+                    tool_calls=[ToolCall(name="launch_app", arguments={"app": resolved_exe}, success=True)],
+                )
 
-        # Regular app launching
-        try:
-            subprocess.Popen(app_name, shell=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return TaskResult(
-                task_id=task.id,
-                status=TaskStatus.SUCCESS,
-                output=f"✅ {app_name} açıldı.",
-                tool_calls=[ToolCall(name="launch_app", arguments={"app": app_name}, success=True)],
-            )
-        except Exception as e:
-            return TaskResult(
-                task_id=task.id,
-                status=TaskStatus.FAILED,
-                error=f"{app_name} açılamadı: {e}",
-            )
+        # Unknown app — refuse to launch
+        return TaskResult(
+            task_id=task.id,
+            status=TaskStatus.FAILED,
+            error=f"🔒 Güvenlik: '{app_name}' tanınmayan bir uygulama. Yalnızca bilinen uygulamalar başlatılabilir.",
+        )
 
     async def _find_and_click_by_description(self, task: Task) -> TaskResult:
         """Find a UI element by natural language description and click it."""
@@ -442,7 +529,6 @@ class RPAOperatorAgent(Agent):
             "youtube.com": "https://youtube.com",
             "twitter": "https://x.com",
             "x.com": "https://x.com",
-            "x": "https://x.com",
             "reddit": "https://reddit.com",
             "github": "https://github.com",
             "gmail": "https://mail.google.com",
@@ -462,72 +548,43 @@ class RPAOperatorAgent(Agent):
         if app_to_open and (is_open_task or website_url):
             steps.append(f"Fast path: Opening {app_to_open}")
             try:
-                # Common app launch commands
-                app_map = {
-                    "Steam": "steam",
-                    "Google Chrome": "chrome",
-                    "Firefox": "firefox",
-                    "Edge": "msedge",
-                    "Opera": "opera",
-                    "Spotify": "spotify",
-                    "Discord": "discord",
-                    "Notepad": "notepad",
-                    "Calculator": "calc",
-                    "Task Manager": "taskmgr",
-                    "Paint": "mspaint",
-                    "Explorer": "explorer",
-                    "Cmd": "cmd",
-                    "Terminal": "wt",
-                    "Vscode": "code",
-                    "Visual Studio Code": "code",
-                    "Pycharm": "pycharm",
-                    "Intellij": "idea",
-                    "Word": "winword",
-                    "Excel": "excel",
-                    "Powerpoint": "powerpnt",
-                    "Outlook": "outlook",
-                    "Teams": "teams",
-                    "Mail": "outlook",
-                }
+                # SECURITY: Use the whitelist-based resolver
+                resolved_exe, resolved_url = self._resolve_app_name(desc)
 
-                exe = app_map.get(app_to_open, "")
-
-                # Step 1: Launch the app
-                if exe:
-                    subprocess.Popen(exe, shell=True,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    steps.append(f"✅ {app_to_open} başlatıldı")
-                elif website_url:
-                    # Open URL in default browser
-                    import webbrowser
-                    webbrowser.open(website_url)
-                    steps.append(f"✅ {app_to_open} tarayıcıda açıldı")
-                    return TaskResult(
-                        task_id=task.id,
-                        status=TaskStatus.SUCCESS,
-                        output="\n".join(steps),
-                    )
-
-                # Step 2: Wait for app to launch
-                import time
-                time.sleep(2)
-
-                # Step 3: If we have a URL to navigate, use webbrowser to open it in default browser
+                # Override with detected website_url if available
                 if website_url:
+                    resolved_url = website_url
+
+                # Step 1: Open URL if we have one
+                if resolved_url:
                     import webbrowser
-                    webbrowser.open(website_url)
-                    steps.append(f"✅ {website_url} tarayıcıda açıldı")
+                    webbrowser.open(resolved_url)
+                    steps.append(f"✅ {resolved_url} tarayıcıda açıldı")
                     return TaskResult(
                         task_id=task.id,
                         status=TaskStatus.SUCCESS,
                         output="\n".join(steps),
                     )
 
-                return TaskResult(
-                    task_id=task.id,
-                    status=TaskStatus.SUCCESS,
-                    output="\n".join(steps),
-                )
+                # Step 2: Launch the app via safe whitelist
+                if resolved_exe:
+                    success = self._safe_launch_executable(resolved_exe)
+                    if success:
+                        steps.append(f"✅ {app_to_open} başlatıldı")
+                    else:
+                        steps.append(f"❌ {app_to_open} başlatılamadı")
+
+                    # Wait for app to appear
+                    import time
+                    time.sleep(2)
+
+                    return TaskResult(
+                        task_id=task.id,
+                        status=TaskStatus.SUCCESS if success else TaskStatus.FAILED,
+                        output="\n".join(steps),
+                    )
+
+                steps.append(f"⚠️ {app_to_open} whitelist'te bulunamadı")
             except Exception as e:
                 steps.append(f"❌ Fast path failed: {e}")
                 # Fall through to full RPA loop

@@ -119,8 +119,19 @@ class Blackboard:
     async def get_all(self, prefix: Optional[str] = None) -> dict[str, Any]:
         """Get all values as a dict."""
         async with self._lock:
+            # Clean expired entries inline — do NOT call self.keys() here,
+            # because keys() also acquires self._lock, causing deadlock.
+            now = datetime.now()
+            expired = [k for k, v in self._store.items() if v.expires_at and now > v.expires_at]
+            for k in expired:
+                del self._store[k]
+
             result = {}
-            for key in await self.keys(prefix):
+            keys = list(self._store.keys())
+            if prefix:
+                keys = [k for k in keys if k.startswith(prefix)]
+
+            for key in keys:
                 entry = self._store[key]
                 if not entry.is_expired():
                     result[key] = entry.value

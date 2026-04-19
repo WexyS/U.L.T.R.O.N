@@ -58,3 +58,11 @@ qwen_responses.md
 ai_bridge_status.md
 context/
 data/bridge_state.json
+
+.ultron-venv/
+repomix-output.
+# Models & Weights
+*.gguf
+*.bin
+models/
+weights/

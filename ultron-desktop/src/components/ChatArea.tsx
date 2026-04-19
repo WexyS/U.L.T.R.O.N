@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  User, Bot, Volume2, VolumeX, Copy, Check, RotateCcw, 
-  Edit2, Share2, ThumbsUp, ThumbsDown, Clock, Zap 
+import {
+  User, Bot, Volume2, VolumeX, Copy, Check, RotateCcw,
+  Edit2, Share2, ThumbsUp, ThumbsDown, Clock, Zap
 } from 'lucide-react';
 import StreamingMessage from './StreamingMessage';
 import type { ChatMessage } from '../hooks/useUltron';

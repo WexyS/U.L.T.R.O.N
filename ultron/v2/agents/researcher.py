@@ -103,17 +103,32 @@ class ResearcherAgent(Agent):
             self.state.current_task = None
 
     async def _web_search(self, query: str) -> list[dict]:
-        """Search the web using DDGS (new package name)."""
-        if self._ddg is None:
-            from ddgs import DDGS
-            self._ddg = DDGS()
-
+        """Search the web using DuckDuckGo with optimized keywords."""
         try:
-            results = list(self._ddg.text(query, max_results=10))
-            logger.info("Search returned %d results for: %s", len(results), query)
-            return results
+            # 1. Optimize query for search engine
+            messages = self._build_messages(
+                f"Extract only the core search keywords from this user query. "
+                f"Remove conversational words like 'what do you know about', 'tell me', 'hakkında ne biliyorsun', etc. "
+                f"Return ONLY the keywords, nothing else.\n\nQuery: {query}"
+            )
+            response = await self._llm_chat(messages, max_tokens=50, temperature=0.1)
+            optimized_query = response.content.strip() or query
+            logger.info("Optimized search query: '%s' -> '%s'", query, optimized_query)
+
+            # 2. Use DDGS in thread to not block event loop
+            import asyncio
+            from duckduckgo_search import DDGS
+            
+            def perform_search():
+                with DDGS() as ddgs:
+                    return list(ddgs.text(optimized_query, max_results=10))
+            
+            urls = await asyncio.to_thread(perform_search)
+            
+            logger.info("Search returned %d results for: %s", len(urls), optimized_query)
+            return urls
         except Exception as e:
-            logger.error("Search failed: %s", e)
+            logger.error("Search failed for '%s': %s", query, e)
             return []
 
     async def _read_urls(self, urls: list[dict], max_hops: int = 2) -> list[dict]:

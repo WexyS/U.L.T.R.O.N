@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Code, Search, Monitor } from 'lucide-react';
+import { Send, Code, Search, Monitor, Languages } from 'lucide-react';
 import VoiceControl from './VoiceControl';
 
 type Mode = 'chat' | 'code' | 'research' | 'rpa';
+type VoiceLang = 'tr-TR' | 'en-US';
 
 interface InputBoxProps {
   onSend: (message: string, mode: Mode) => void;
@@ -22,6 +23,7 @@ export default function InputBox({ onSend, disabled, isConnected }: InputBoxProp
   const [mode, setMode] = useState<Mode>('chat');
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceLang, setVoiceLang] = useState<VoiceLang>('tr-TR');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea

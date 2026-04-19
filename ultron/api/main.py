@@ -4,8 +4,13 @@ import asyncio
 import logging
 import os
 import time
+import warnings
 from contextlib import asynccontextmanager
 from typing import Optional
+
+# Suppress verbose Torch and EasyOCR warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="torch.*|easyocr.*")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="torch.*|websockets.*")
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, HTTPException
@@ -92,6 +97,24 @@ async def lifespan(app: FastAPI):
         _orchestrator = Orchestrator(llm_router=llm, memory=memory, work_dir="./workspace")
         await _orchestrator.start()  # Sets _running=True, starts all agents
 
+        # Start background daemons
+        try:
+            from ultron.v2.core.auto_launchers import start_all_auto_launchers
+            from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
+            import asyncio
+            
+            await start_all_auto_launchers()
+            
+            evolution_daemon = EternalEvolutionEngine(_orchestrator, sleep_interval_minutes=60)
+            asyncio.create_task(evolution_daemon.start_loop())
+            if _use_structlog:
+                logger.info("eternal_daemon_started")
+            else:
+                logger.info("Eternal Autonomous Evolution daemon hooked and running.")
+        except Exception as e:
+            if not _use_structlog:
+                logger.warning(f"Failed to start background daemons: {e}")
+
         if _use_structlog:
             logger.info("llm_providers", providers=llm.get_healthy_providers())
             logger.info("agents_started", agents=list(_orchestrator.agents.keys()))
@@ -135,7 +158,11 @@ async def verify_api_key(request: Request):
     if not ULTRON_API_KEY:
         return  # No key configured, skip auth
     api_key = request.headers.get("X-API-Key")
-    if not api_key or api_key != ULTRON_API_KEY:
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header")
+    # SECURITY FIX: Use constant-time comparison to prevent timing attacks
+    import hmac
+    if not hmac.compare_digest(api_key, ULTRON_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header")
 
 # ── Request logging middleware ────────────────────────────────────────
@@ -146,11 +173,13 @@ from ultron.api.routes.chat import router as chat_router
 from ultron.api.routes.agents import router as agents_router
 from ultron.api.routes.status import router as status_router
 from ultron.api.routes.training import router as training_router
+from ultron.api.routes.conversations import router as conversations_router
 
 app.include_router(chat_router)
 app.include_router(agents_router)
 app.include_router(status_router)
 app.include_router(training_router)
+app.include_router(conversations_router)
 
 # Workspace models — needed for endpoint type hints
 from ultron.v2.workspace.models import CloneRequest, GenerateRequest, SynthesizeRequest
@@ -205,13 +234,24 @@ _workspace_mgr = None
 async def get_workspace_mgr():
     global _workspace_mgr
     if _workspace_mgr is None:
-        from ultron.v2.workspace.workspace_manager import WorkspaceManager
-        _workspace_mgr = WorkspaceManager()
-        await _workspace_mgr.init_db()
+        try:
+            from ultron.v2.workspace.workspace_manager import WorkspaceManager
+            _workspace_mgr = WorkspaceManager()
+            await _workspace_mgr.init_db()
+        except ImportError as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Workspace dependency missing: {e}. Install with: pip install aiosqlite playwright"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Workspace init failed: {e}"
+            )
     return _workspace_mgr
 
 
-@app.post("/api/v2/workspace/clone")
+@app.post("/api/v2/workspace/clone", dependencies=[Depends(verify_api_key)])
 @limiter.limit("5/minute")
 async def clone_site(req: CloneRequest, request: Request):
     """n8n veya frontend tarafından çağrılır. URL'yi klonlar."""
@@ -220,10 +260,10 @@ async def clone_site(req: CloneRequest, request: Request):
         item = await mgr.clone_site(req)
         return {"success": True, "item": item.model_dump()}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v2/workspace/generate")
+@app.post("/api/v2/workspace/generate", dependencies=[Depends(verify_api_key)])
 @limiter.limit("10/minute")
 async def generate_app(req: GenerateRequest, request: Request):
     """Fikir metninden sıfırdan uygulama üretir."""
@@ -232,10 +272,10 @@ async def generate_app(req: GenerateRequest, request: Request):
         item = await mgr.generate_app(req)
         return {"success": True, "item": item.model_dump()}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/v2/workspace/synthesize")
+@app.post("/api/v2/workspace/synthesize", dependencies=[Depends(verify_api_key)])
 @limiter.limit("10/minute")
 async def synthesize(req: SynthesizeRequest, request: Request):
     """Mevcut şablonlardan yeni uygulama sentezler."""
@@ -244,7 +284,7 @@ async def synthesize(req: SynthesizeRequest, request: Request):
         item = await mgr.synthesize(req)
         return {"success": True, "item": item.model_dump()}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/v2/workspace/list")
@@ -339,6 +379,35 @@ async def providers_status():
         return {"error": str(e)}
 
 
+class OpenGuiderRequest(BaseModel):
+    message: str
+    image_b64: Optional[str] = None
+
+@app.post("/api/v2/openguider/chat")
+@limiter.limit("30/minute")
+async def openguider_chat(req: OpenGuiderRequest, request: Request):
+    """Endpoint for OpenGuider to interact with Ultron."""
+    try:
+        from ultron.v2.core.types import AgentRole, Task
+        if not _orchestrator:
+            return JSONResponse(status_code=503, content={"error": "Orchestrator not ready yet."})
+            
+        agent = _orchestrator.agents.get(AgentRole.OPENGUIDER_BRIDGE)
+        if not agent:
+            # Fallback to standard process if bridge not registered
+            result = await _orchestrator.process(req.message)
+            return {"success": True, "response": result}
+
+        # Submit task to OpenGuiderBridgeAgent
+        task = Task(
+            description=req.message,
+            context={"action": "process_screen" if req.image_b64 else "chat", "image_b64": req.image_b64}
+        )
+        task_result = await agent.execute(task)
+        return {"success": task_result.status == "success", "response": task_result.output, "error": task_result.error}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 # ──────────────────────────────────────────────────────────────────────
 # TTS Endpoint — Text-to-Speech via edge-tts
 # ──────────────────────────────────────────────────────────────────────
@@ -346,11 +415,45 @@ async def providers_status():
 @app.post("/api/v2/tts")
 @limiter.limit("60/minute")
 async def text_to_speech(req: TTSRequest, request: Request):
-    """Convert text to speech. Returns audio stream."""
+    """Convert text to speech. Returns audio stream. Uses VoiceBox with EdgeTTS fallback."""
     try:
-        import edge_tts
+        import httpx
         import io
 
+        # 1. Try Local VoiceBox API
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                # Assuming VoiceBox takes simple JSON and returns audio stream
+                payload = {
+                    "text": req.text,
+                    "language": req.language, 
+                }
+                if req.voice:
+                    payload["profile_id"] = req.voice
+
+                resp = await client.post("http://localhost:17493/generate", json=payload)
+                if resp.status_code == 200:
+                    return StreamingResponse(
+                        io.BytesIO(resp.content),
+                        media_type="audio/mpeg",
+                        headers={
+                            "Content-Disposition": 'inline; filename="tts.mp3"',
+                            "X-TTS-Engine": "VoiceBox",
+                        }
+                    )
+                else:
+                    if _use_structlog:
+                        logger.warning("voicebox_failed", status_code=resp.status_code, content=resp.text)
+                    else:
+                        logger.warning(f"VoiceBox failed: {resp.status_code}")
+        except Exception as vb_error:
+            if _use_structlog:
+                logger.debug("voicebox_unavailable", error=str(vb_error))
+            else:
+                logger.debug(f"VoiceBox unavailable: {vb_error}")
+
+        # 2. Fallback to EdgeTTS
+        import edge_tts
         # Auto-select voice based on language
         voice = req.voice
         if not voice:
@@ -359,18 +462,22 @@ async def text_to_speech(req: TTSRequest, request: Request):
             else:
                 voice = "en-US-JennyNeural"
 
+        # Stream audio chunks directly
         communicate = edge_tts.Communicate(req.text, voice)
-        audio_data = bytearray()
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data.extend(chunk["data"])
+
+        async def audio_stream():
+            """Async generator that yields audio chunks as they arrive."""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    yield chunk["data"]
 
         return StreamingResponse(
-            iter([bytes(audio_data)]),
+            audio_stream(),
             media_type="audio/mpeg",
             headers={
-                "Content-Disposition": f'inline; filename="tts.mp3"',
+                "Content-Disposition": 'inline; filename="tts.mp3"',
                 "X-Voice": voice,
+                "X-TTS-Engine": "EdgeTTS"
             }
         )
     except Exception as e:

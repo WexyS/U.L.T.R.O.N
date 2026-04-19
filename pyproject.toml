@@ -38,6 +38,7 @@ dependencies = [
     "langchain-community>=0.2.0",
     "langchain-ollama>=0.1.0",
     "langchain-text-splitters>=0.2.0",
+    "langgraph>=0.1.0",
     "sentence-transformers>=2.2.0",
 
     # ── v2.0 Multi-Agent & RPA ────────────────────────────────────────
@@ -77,13 +78,16 @@ dependencies = [
     "tenacity>=8.3.0",
 
     # ── Skill System (BÖLÜM 2) ────────────────────────────────────────
-    "sentence-transformers>=2.2.0",    # already present — confirmed
-    "aiosqlite>=0.20.0",               # already present — confirmed
     "google-generativeai>=0.8.0",      # Gemini SDK
 
     # ── AirLLM (Massive Local Models) ─────────────────────────────────
     "airllm>=2.8.0",
     "accelerate>=0.26.0",
+
+    # ── Desktop GUI & Wake Word ───────────────────────────────────────
+    "PyQt6>=6.6.0",
+    "qasync>=0.27.0",
+    "vosk>=0.3.45",
 ]
 
 [project.optional-dependencies]

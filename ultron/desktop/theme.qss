@@ -1,0 +1,51 @@
+/* Ultron Core Theme - Silver Minimalist */
+
+QMainWindow {
+    background-color: transparent;
+}
+
+QWidget#CentralHUD {
+    background-color: rgba(10, 10, 12, 230); /* Dark metallic gray glass */
+    border: 1px solid rgba(255, 255, 255, 40);
+    border-radius: 30px;
+}
+
+QLabel {
+    color: #e0e0e0;
+    font-family: "Segoe UI", "Inter", "Helvetica", sans-serif;
+    font-size: 16px;
+}
+
+QLabel#SubtitleText {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: 300; /* Light elegant font */
+    text-align: center;
+}
+
+QLabel#TitleLabel {
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: rgba(255, 255, 255, 100);
+}
+
+QPushButton {
+    background-color: transparent;
+    border: None;
+    color: rgba(255, 255, 255, 80);
+    padding: 10px;
+    font-family: "Segoe UI", sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+QPushButton:hover {
+    color: #ffffff;
+}
+
+QPushButton:pressed {
+    color: #a0a0a0;
+}

@@ -84,6 +84,26 @@ async def start_training(request: TrainingStartRequest):
     if active_process:
         raise HTTPException(status_code=400, detail="Training already in progress")
 
+    # Pre-flight check: verify llamafactory-cli is available
+    import shutil
+    if not shutil.which("llamafactory-cli"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "llamafactory-cli not found on PATH. "
+                "Install with: pip install llamafactory "
+                "or follow: https://github.com/hiyouga/LLaMA-Factory"
+            )
+        )
+
+    # Verify dataset exists
+    dataset_path = Path(request.dataset)
+    if not dataset_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dataset not found: {request.dataset}. Create the training data first."
+        )
+
     # Generate job ID
     job_id = f"job_{len(training_jobs) + 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
@@ -152,7 +172,8 @@ async def start_training(request: TrainingStartRequest):
     except Exception as e:
         job["status"] = "failed"
         job["error"] = str(e)
-        logger.error(f"❌ Training start failed: {e}")
+        active_process = None
+        logger.error("Training start failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

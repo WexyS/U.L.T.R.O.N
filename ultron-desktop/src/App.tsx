@@ -230,6 +230,7 @@ function App() {
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-ultron-bg-tertiary transition-colors"
+              aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
               title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             >
               {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
@@ -237,6 +238,7 @@ function App() {
             <button
               onClick={() => setInspectorOpen(!inspectorOpen)}
               className="p-2 rounded-lg hover:bg-ultron-bg-tertiary transition-colors"
+              aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
               title="Toggle inspector"
             >
               {inspectorOpen ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}

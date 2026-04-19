@@ -25,7 +25,7 @@
   <a href="#-features"><strong>Features</strong></a> •
   <a href="#-quick-start"><strong>Quick Start</strong></a> •
   <a href="#-architecture"><strong>Architecture</strong></a> •
-  <a href="#-9-specialized-agents"><strong>Agents</strong></a> •
+  <a href="#-11-specialized-agents"><strong>Agents</strong></a> •
   <a href="#-autonomous-learning"><strong>Autonomous Learning</strong></a> •
   <a href="#-ui-features"><strong>UI Features</strong></a> •
   <a href="#-comparison-with-leading-ai-assistants"><strong>Comparison</strong></a> •
@@ -62,18 +62,26 @@
 - **Memory Persistence**: All learned content persists across sessions
 - **Research Reports**: Generate comprehensive reports from research sessions
 
-### 🤖 9 Specialized Agents
+### 🤖 11 Specialized Agents
 | Agent | Capability | Best For |
 |-------|-----------|----------|
 | **CoderAgent** | Write, debug, execute code with auto-healing loop | Programming tasks |
 | **ResearcherAgent** | Multi-hop web research with DuckDuckGo | Deep research |
 | **RPAOperatorAgent** | Screen capture, OCR, mouse/keyboard automation | System control |
 | **AutonomousResearcher** | Autonomous web browsing & knowledge building | Self-learning |
+| **DebateAgent** | Multi-persona critical reasoning & argument synthesis | Critical decision making |
+| **OpenGuiderBridge** | Seamless connection with OpenGuider Desktop UI | Desktop visual awareness |
 | **EmailAgent** | Async IMAP/SMTP inbox reading & summarization | Email management |
 | **SystemMonitorAgent** | Real-time CPU/RAM/disk monitoring | System health |
 | **ClipboardAgent** | Auto-detect & process clipboard content | Quick actions |
-| **MeetingAgent** | Live Whisper-based transcription | Meeting notes |
+| **MeetingAgent** | Live Whisper/VoiceBox transcription & TTS | Meeting notes |
 | **FilesAgent** | Directory monitoring & file organization | File management |
+
+### 🎙️ Extensible Ecosystem
+- **VoiceBox Native TTS**: Auto-detection and routing to localized [Jamie Pine VoiceBox](https://github.com/jamiepine/voicebox) for ultra-realistic speech with 0-latency EdgeTTS fallback.
+- **Auto Launchers**: Self-healing boot sequence that detects missing dependencies and automatically launches GUI companions like VoiceBox on startup.
+- **OpenGuider Companion**: Native vision streaming and contextual assistance on Windows/Mac via OpenGuider UI protocol.
+- **Multi-Agent Debate**: When facing complex decisions, ask Ultron to *"debate"* it; it will instantiate an Advocate, Critic, and Judge personas to rigorously argue technical trade-offs before synthesizing an optimal final response.
 
 ### 🌐 13 AI Providers with Smart Routing
 | Priority | Provider | Type | Best For |
@@ -647,7 +655,9 @@ Found 20 resources through autonomous web research.
 | **Knowledge graph building** | ✅ | ❌ | ❌ | ❌ |
 | **100% local & private** | ✅ | ❌ | ❌ | ❌ |
 | **13 AI providers** | ✅ | ❌ | ❌ | ❌ |
-| **Multi-agent system** | ✅ (9) | ❌ | ❌ | ❌ |
+| **Multi-agent system** | ✅ (11) | ❌ | ❌ | ❌ |
+| **VoiceBox / EdgeTTS integration** | ✅ | ❌ | ⚠️ | ❌ |
+| **Multi-Agent Debate Protocol** | ✅ | ❌ | ❌ | ❌ |
 | **Message actions** | ✅ (5) | ✅ (3) | ✅ (4) | ✅ (3) |
 | **Syntax highlighting** | ✅ | ✅ | ✅ | ✅ |
 | **Streaming animations** | ✅ | ✅ | ✅ | ⚠️ |
@@ -728,7 +738,7 @@ Free to use, modify, and distribute. No warranty.
 
 **Built with ❤️ and autonomous intelligence.**
 
-**9 Agents • 13 AI Providers • Infinite Possibilities**
+**11 Agents • 13 AI Providers • Infinite Possibilities**
 
 **[⭐ Star this repo](https://github.com/WexyS/Ultron) if you find it useful!**
 

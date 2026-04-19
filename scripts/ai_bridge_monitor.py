@@ -23,9 +23,9 @@ from typing import Optional
 
 # Proje kökü
 PROJECT_ROOT = Path(__file__).parent.parent
-REQUESTS_FILE = PROJECT_ROOT / "gemini_requests.md"
-RESPONSES_FILE = PROJECT_ROOT / "qwen_responses.md"
-STATUS_FILE = PROJECT_ROOT / "ai_bridge_status.md"
+REQUESTS_FILE = PROJECT_ROOT / "data" / "gemini_requests.md"
+RESPONSES_FILE = PROJECT_ROOT / "data" / "qwen_responses.md"
+STATUS_FILE = PROJECT_ROOT / "data" / "ai_bridge_status.md"
 BRIDGE_STATE_FILE = PROJECT_ROOT / "data" / "bridge_state.json"
 
 # Logging

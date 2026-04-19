@@ -25,6 +25,14 @@ from ultron.v2.agents.clipboard_agent import ClipboardAgent
 from ultron.v2.agents.meeting_agent import MeetingAgent
 from ultron.v2.agents.files_agent import FilesAgent
 from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
+from ultron.v2.agents.openguider_bridge import OpenGuiderBridgeAgent
+from ultron.v2.agents.debate_agent import DebateAgent
+
+# ── AGI Core Modules ──────────────────────────────────────
+from ultron.v2.core.reasoning_engine import ReasoningEngine
+from ultron.v2.core.planner import Planner
+from ultron.v2.core.security import SecurityManager
+from ultron.v2.core.self_improvement import SelfImprovementEngine
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +73,7 @@ INTENT_KEYWORDS = {
                 "dikte", "ses kaydı", "voice note"],
     "clipboard": ["pano", "clipboard", "kopyala", "paste", "yapıştır", "kod analiz",
                   "code review bu kodu"],
+    "debate": ["tartış", "fikir bul", "en iyisini bul", "debate", "karşılaştır"],
 }
 
 
@@ -97,9 +106,7 @@ class Orchestrator:
             ollama_model="qwen2.5-coder:7b",  # Coder keeps 7b for speed; cloud fallback for complex tasks
         )
         # Enable ALL cloud providers on coder router for maximum fallback options
-        import os as _os
-        _os.environ.get  # just to ensure os module is available
-        coder_env = dict(_os.environ)
+        coder_env = dict(os.environ)
         self.coder_llm_router.enable_all_providers(coder_env)
 
         # RPA + Researcher use the main router (qwen2.5-coder:14b — the new default)
@@ -115,6 +122,23 @@ class Orchestrator:
 
         self._running = False
         self._task_queue: asyncio.Queue[Task] = asyncio.Queue()
+
+        # ── AGI Core Systems ─────────────────────────────────────
+        self.reasoning = ReasoningEngine(llm_router=self.llm_router, memory=self.memory)
+        self.planner = Planner(llm_router=self.llm_router, memory=self.memory)
+        self.security = SecurityManager(audit_dir="./data/audit")
+        self.self_improvement = SelfImprovementEngine(
+            llm_router=self.llm_router,
+            memory=self.memory,
+            data_dir="./data/self_improvement",
+        )
+        logger.info(
+            "AGI core systems initialized: Reasoning=%s, Planner=%s, Security=%s, SelfImprovement=%s",
+            type(self.reasoning).__name__,
+            type(self.planner).__name__,
+            type(self.security).__name__,
+            type(self.self_improvement).__name__,
+        )
         self._active_tasks: dict[str, Task] = {}
 
         self.hermes_tools: list = []  # Populated dynamically per session
@@ -194,6 +218,24 @@ class Orchestrator:
             logger.warning("Failed to initialize ErrorAnalyzerAgent: %s", e)
             self.error_analyzer = None
 
+        try:
+            self.agents[AgentRole.OPENGUIDER_BRIDGE] = OpenGuiderBridgeAgent(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize OpenGuiderBridgeAgent: %s", e)
+
+        try:
+            self.agents[AgentRole.DEBATE] = DebateAgent(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize DebateAgent: %s", e)
+
         logger.info("Initialized %d agents", len(self.agents))
 
     async def start(self) -> None:
@@ -221,7 +263,7 @@ class Orchestrator:
             self.event_bus._global_handlers.clear()
         logger.info("Orchestrator stopped")
 
-    async def process(self, user_input: str, context: Optional[dict] = None) -> str:
+    async def process(self, user_input: str, context: Optional[dict] = None, _depth: int = 0) -> str:
         """Process a user request end-to-end.
 
         Flow:
@@ -231,7 +273,15 @@ class Orchestrator:
         4. Parallel execution
         5. Result aggregation
         6. Response generation
+
+        Args:
+            _depth: Internal recursion guard. Do not set externally.
         """
+        # SECURITY FIX: Prevent infinite recursion on complex multi-task chains
+        if _depth > 10:
+            logger.warning("Recursion depth exceeded (depth=%d) for input: %s", _depth, user_input[:100])
+            return f"Task is too complex to process (depth limit reached). Please simplify your request."
+
         # Get relevant lessons from memory
         lesson_context = self.memory.get_lesson_context(user_input)
 
@@ -240,6 +290,23 @@ class Orchestrator:
             intent = context["intent"]
         else:
             intent = self._classify_intent_fast(user_input)
+            # If fast classifier matched a non-chat intent, verify with LLM
+            # for ambiguous cases where confidence might be low
+            if intent.get("type") != "chat":
+                # For potentially ambiguous inputs, let LLM confirm
+                llm_intent = await self._classify_intent(user_input)
+                # If LLM disagrees (says chat but fast said something else), trust LLM
+                if llm_intent.get("type") == "chat" and intent.get("type") != "chat":
+                    # Only override if the fast match was on short/ambiguous keywords
+                    input_lower = user_input.lower()
+                    matched_short_kw = any(
+                        len(kw.lower()) <= 3 and kw.lower() in input_lower
+                        for kw in INTENT_KEYWORDS.get(intent.get("type", ""), [])
+                    )
+                    if matched_short_kw:
+                        intent = llm_intent
+                        logger.info("Fast→LLM override: %s → %s", intent.get("type"), llm_intent.get("type"))
+
         logger.info("Intent: %s", intent)
 
         # Step 2: Route to appropriate agent(s)
@@ -290,13 +357,15 @@ class Orchestrator:
             else:
                 result = await self._execute_rpa_task(user_input, intent, lesson_context)
         elif intent.get("type") == "multi":
-            result = await self._execute_multi_task(user_input, intent, lesson_context)
+            result = await self._execute_multi_task(user_input, intent, lesson_context, _depth=_depth)
         elif intent.get("type") == "email":
             result = await self._execute_email_task(user_input, intent, lesson_context)
         elif intent.get("type") == "clipboard":
             result = await self._execute_clipboard_task(user_input, intent, lesson_context)
         elif intent.get("type") == "meeting":
             result = await self._execute_meeting_task(user_input, intent, lesson_context)
+        elif intent.get("type") == "debate":
+            result = await self._execute_debate_task(user_input, intent, lesson_context)
         elif intent.get("type") == "skill":
             result = await self._execute_skill_task(user_input, intent, lesson_context)
         elif intent.get("type") == "agent":
@@ -317,12 +386,26 @@ class Orchestrator:
 
 
     def _classify_intent_fast(self, user_input: str) -> dict:
-        """Fast keyword-based intent classification (no LLM needed)."""
+        """Fast keyword-based intent classification with word-boundary awareness."""
         input_lower = user_input.lower()
+        # Tokenize into words for better matching (split on whitespace and punctuation)
+        tokens = set(re.findall(r'[a-zçğıöşü]+', input_lower))
 
+        # First pass: exact word match (higher confidence)
         for intent_type, keywords in INTENT_KEYWORDS.items():
-            if any(kw in input_lower for kw in keywords):
-                return {"type": intent_type, "subtasks": [user_input]}
+            for kw in keywords:
+                kw_lower = kw.lower()
+                # Multi-word phrases: check as phrase in input
+                if " " in kw_lower or "-" in kw_lower:
+                    if kw_lower in input_lower:
+                        return {"type": intent_type, "subtasks": [user_input]}
+                # Short keywords (≤4 chars): require exact token match (word boundary)
+                elif len(kw_lower) <= 4:
+                    if kw_lower in tokens:
+                        return {"type": intent_type, "subtasks": [user_input]}
+                # Longer keywords: substring match is safe enough
+                elif kw_lower in input_lower:
+                    return {"type": intent_type, "subtasks": [user_input]}
 
         # Check if skills or discovered agents match
         for skill in self._skills:
@@ -342,18 +425,23 @@ class Orchestrator:
             {
                 "role": "system",
                 "content": (
-                    "Classify the user's intent into one of these categories:\n"
-                    "- 'code': Writing, debugging, or executing code\n"
-                    "- 'research': Finding information, web research, analysis\n"
-                    "- 'rpa': Controlling the computer, clicking UI, opening apps\n"
+                    "Classify the user's intent into one of these categories.\n"
+                    "IMPORTANT: If the user is just talking, asking questions, giving feedback, "
+                    "or having a conversation — classify as 'chat'. Only use action types when "
+                    "the user explicitly asks you to DO something.\n\n"
+                    "- 'code': Writing, debugging, or executing code (user says 'write code', 'fix this', 'run script')\n"
+                    "- 'research': Web search needed (user asks to look up info online, investigate)\n"
+                    "- 'rpa': Controlling the computer, clicking UI, opening apps/websites\n"
                     "- 'email': Reading, summarizing, or sending emails\n"
                     "- 'system': CPU, RAM, disk monitoring, process management\n"
                     "- 'clipboard': Analyzing clipboard content, code review from clipboard\n"
                     "- 'meeting': Recording, transcribing, summarizing meetings\n"
-                    "- 'file': Organizing files, finding duplicates, desktop cleanup\n"
+                    "- 'file': Explicitly reading/writing/listing files or folders (user says 'read file X', 'list folder Y', 'create file Z')\n"
                     "- 'multi': Complex task requiring multiple agents\n"
-                    "- 'chat': General conversation, simple questions\n\n"
-                    'Return JSON: {"type": "code|research|rpa|email|system|clipboard|meeting|file|multi|chat", '
+                    "- 'chat': General conversation, opinions, feedback, questions, explanations\n\n"
+                    "Rule of thumb: If you're unsure, it's probably 'chat'. "
+                    "Only use action types when the request is clearly and explicit.\n\n"
+                    'Return ONLY JSON: {"type": "code|research|rpa|email|system|clipboard|meeting|file|multi|chat", '
                     '"subtasks": ["task1", "task2"], '
                     '"requires_parallel": true/false}'
                 ),
@@ -622,11 +710,26 @@ class Orchestrator:
         result = await agent.execute(task)
         return result.output or result.error or "Toplantı işlemi tamamlandı."
 
+    async def _execute_debate_task(
+        self,
+        user_input: str,
+        intent: dict,
+        lesson_context: str,
+    ) -> str:
+        """Execute via DebateAgent."""
+        agent = self.agents.get(AgentRole.DEBATE)
+        if not agent:
+            return "⚠️ Debate agent başlatılamadı."
+        task = Task(description=user_input, intent="debate", context={"rounds": 2})
+        result = await agent.execute(task)
+        return result.output or result.error or "Tartışma tamamlandı."
+
     async def _execute_multi_task(
         self,
         user_input: str,
         intent: dict,
         lesson_context: str,
+        _depth: int = 0,
     ) -> str:
         """Execute multiple subtasks in parallel."""
         subtasks = intent.get("subtasks", [user_input])
@@ -637,8 +740,8 @@ class Orchestrator:
             # Sonsuz döngüyü önlemek için intent tipi multi ise chat'e çek
             if sub_intent.get("type") == "multi":
                 sub_intent["type"] = "chat"
-            # Tüm alt görevi doğrudan ana orkestratör pipeline'ından geçir, böylece TÜM ajanları kapsar
-            return await self.process(subtask, context={"intent": sub_intent})
+            # Tüm alt görevi doğrudan ana orkestratör pipeline'ından geçir
+            return await self.process(subtask, context={"intent": sub_intent}, _depth=_depth + 1)
 
         futures = [run_subtask(task) for task in subtasks]
         sub_results = await asyncio.gather(*futures, return_exceptions=True)
@@ -784,7 +887,7 @@ class Orchestrator:
 
         # Store this interaction for future context
         self.memory.store(
-            entry_id=f"chat_{int(__import__('time').time())}",
+            entry_id=f"chat_{int(datetime.now().timestamp())}",
             content=f"User: {user_input}\nUltron: {response.content[:500]}",
             entry_type="episodic",
             metadata={"type": "chat"},
@@ -807,4 +910,9 @@ class Orchestrator:
             "llm_providers": self.llm_router.get_status(),
             "memory": self.memory.stats(),
             "event_bus_events": len(self.event_bus.get_recent_events(100)),
+            # AGI Core Systems
+            "reasoning": self.reasoning.get_stats(),
+            "planner": self.planner.get_stats(),
+            "security": self.security.get_stats(),
+            "self_improvement": self.self_improvement.get_stats(),
         }

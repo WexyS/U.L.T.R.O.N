@@ -607,6 +607,111 @@ class EdgeTTS:
         with self._lock:
             return self._playing
 
+class VoiceBoxTTS:
+    """VoiceBox API ile TTS. Basarisiz olursa EdgeTTS'e duser. Pygame ile oynatir."""
+    def __init__(self, language: str = "tr", fallback_voice: str = "tr-TR-EmelNeural"):
+        self.language = language
+        self.fallback = EdgeTTS(voice=fallback_voice)
+        self._stop_event = threading.Event()
+        self._playing = False
+        self._lock = threading.Lock()
+        
+    def speak(self, text: str) -> threading.Thread:
+        self._stop_event.clear()
+        with self._lock:
+            self._playing = True
+        t = threading.Thread(target=self._worker, args=(text,), daemon=True)
+        t.start()
+        return t
+        
+    def _worker(self, text: str):
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._async_speak(text))
+            loop.close()
+        except Exception as e:
+            logger.warning("VoiceBoxTTS basarisiz: %s", e)
+        finally:
+            with self._lock:
+                self._playing = False
+                
+    async def _async_speak(self, text: str):
+        # Clean text
+        import re
+        import pygame
+        import httpx
+        clean = re.sub(r"[#*`_\[\](){}]", "", text)
+        clean = re.sub(r"\n{3,}", "\n\n", clean).strip()
+        if not clean: return
+        
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+        tmp.close()
+        
+        used_fallback = False
+        try:
+            # 1. Try VoiceBox
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post("http://localhost:17493/generate", json={
+                    "text": clean, "language": self.language
+                })
+                if resp.status_code == 200:
+                    with open(tmp.name, "wb") as f:
+                        f.write(resp.content)
+                else:
+                    used_fallback = True
+        except Exception as e:
+            logger.debug(f"VoiceBox unavailable: {e}")
+            used_fallback = True
+            
+        if used_fallback:
+            # Fallback to EdgeTTS but inside our async context
+            # We just delegate to the fallback entirely and return
+            self.fallback._stop_event = self._stop_event # Share stop event
+            await self.fallback._async_speak(clean)
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+            return
+
+        # Play VoiceBox Audio
+        if self._stop_event.is_set():
+            return
+            
+        try:
+            pygame.mixer.init(frequency=24000, size=-16, channels=1)
+            pygame.mixer.music.load(tmp.name)
+            pygame.mixer.music.play()
+            
+            while pygame.mixer.music.get_busy() and not self._stop_event.is_set():
+                await asyncio.sleep(0.1)
+                
+            pygame.mixer.music.stop()
+            pygame.mixer.quit()
+        except Exception as e:
+            logger.warning("VoiceBox oynatma hatasi: %s", e)
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+                
+    def stop(self):
+        self._stop_event.set()
+        self.fallback.stop()
+        try:
+            import pygame
+            if pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    @property
+    def is_playing(self) -> bool:
+        with self._lock:
+            return self._playing or self.fallback.is_playing
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Baglam Yoneticisi
@@ -705,8 +810,8 @@ class VoicePipeline:
         # VAD
         self.vad = SileroVAD(threshold=SILENCE_THRESHOLD)
 
-        # TTS
-        self.tts = EdgeTTS(voice=_settings["tts_voice"])
+        # TTS (VoiceBox primarily, EdgeTTS fallback)
+        self.tts = VoiceBoxTTS(language=language, fallback_voice=_settings["tts_voice"])
 
         # Baglam
         system_prompt = self._build_system_prompt()

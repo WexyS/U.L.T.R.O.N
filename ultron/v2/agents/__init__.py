@@ -12,6 +12,8 @@ from .meeting_agent import MeetingAgent
 from .files_agent import FilesAgent
 from .calendar_agent import CalendarAgent
 from .task_manager_agent import TaskManagerAgent
+from .openguider_bridge import OpenGuiderBridgeAgent
+from .debate_agent import DebateAgent
 
 __all__ = [
     "Agent",
@@ -22,7 +24,9 @@ __all__ = [
     "SystemMonitorAgent",
     "ClipboardAgent",
     "MeetingAgent",
-    "FileOrganizerAgent",
+    "FilesAgent",
     "CalendarAgent",
     "TaskManagerAgent",
+    "OpenGuiderBridgeAgent",
+    "DebateAgent",
 ]

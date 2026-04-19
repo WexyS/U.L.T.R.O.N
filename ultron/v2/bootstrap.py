@@ -242,6 +242,14 @@ async def main() -> None:
     console.print("[dim]Initializing Memory Engine...[/dim]")
     memory = MemoryEngine(persist_dir="./data/memory_v2")
 
+    # Start external background routines (Voicebox, etc.)
+    console.print("[dim]Checking & auto-launching external tools (Voicebox)...[/dim]")
+    try:
+        from ultron.v2.core.auto_launchers import start_all_auto_launchers
+        await start_all_auto_launchers()
+    except Exception as e:
+        console.print(f"[yellow]Auto-launcher failed quietly: {e}[/yellow]")
+
     # Initialize Orchestrator
     console.print("[dim]Initializing Orchestrator...[/dim]")
     orchestrator = Orchestrator(
@@ -249,6 +257,20 @@ async def main() -> None:
         memory=memory,
         work_dir=args.work_dir,
     )
+
+    # ⚡ Start Eternal Autonomous Evolution Daemon
+    try:
+        from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
+        evolution_daemon = EternalEvolutionEngine(orchestrator, sleep_interval_minutes=60)
+        asyncio.create_task(evolution_daemon.start_loop())
+        console.print("[dim]⚡ Eternal Autonomous Evolution Engine started in background...[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]Eternal daemon failed to start: {e}[/yellow]")
+
+    # System ready
+    console.print("\n[bold green]System Initialized Successfully![/bold green]")
+    console.print(f"Memory: {memory.stats()}")
+    console.print()
 
     # Start
     await orchestrator.start()

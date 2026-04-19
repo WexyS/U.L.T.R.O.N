@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -63,8 +64,11 @@ class MemoryEngine:
         
         # ASYNC OPTIMIZATION: Background task pool
         self._background_tasks: list[asyncio.Task] = []
-        self._pending_upserts: asyncio.Queue = asyncio.Queue()
-        
+        self._pending_upserts: list = []  # Simple list instead of asyncio.Queue to avoid init-time loop requirement
+
+        # THREAD SAFETY: Lock for synchronous ChromaDB fallback
+        self._sync_lock = threading.Lock()
+
         # SMART CACHING (İstek #3): Sık aranan sorguları cache'le
         self._query_cache: dict[str, tuple[list[dict], datetime]] = {}  # query -> (results, timestamp)
         self._cache_hits = 0
@@ -127,19 +131,19 @@ class MemoryEngine:
             )
             logger.debug("Memory store task queued: %s (%s)", entry_id, entry_type)
         except RuntimeError:
-            # No running event loop â store synchronously as fallback
-            try:
-                embedding = self._get_embedding(content)
-                self._chroma_collection.upsert(
-                    ids=[entry_id],
-                    embeddings=[embedding],
-                    documents=[content],
-                    metadatas=[{"type": entry_type, **(metadata or {})}],
-                )
-                logger.debug("Memory stored (sync fallback): %s (%s)", entry_id, entry_type)
-            except Exception as e:
-                logger.error("Failed to store memory (sync fallback): %s", e)
-    
+            # No running event loop — store synchronously with thread safety
+            with self._sync_lock:
+                try:
+                    embedding = self._get_embedding(content)
+                    self._chroma_collection.upsert(
+                        ids=[entry_id],
+                        embeddings=[embedding],
+                        documents=[content],
+                        metadatas=[{"type": entry_type, **(metadata or {})}],
+                    )
+                    logger.debug("Memory stored (sync fallback): %s (%s)", entry_id, entry_type)
+                except Exception as e:
+                    logger.error("Failed to store memory (sync fallback): %s", e)
     async def _async_store(
         self,
         entry_id: str,

@@ -192,20 +192,19 @@ class OllamaProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         import ollama
 
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: ollama.chat(
-                model=self._model,
-                messages=messages,
-                stream=True,
-                options={
-                    "temperature": temperature or 0.7,
-                    "num_predict": max_tokens or 4096,
-                },
-            )
+        # Use async client for proper async streaming
+        client = ollama.AsyncClient(host=self._base_url)
+        response = await client.chat(
+            model=self._model,
+            messages=messages,
+            stream=True,
+            options={
+                "temperature": temperature or 0.7,
+                "num_predict": max_tokens or 4096,
+            },
         )
 
-        for chunk in response:
+        async for chunk in response:
             if "message" in chunk and "content" in chunk["message"]:
                 yield chunk["message"]["content"]
 
@@ -668,16 +667,52 @@ class LLMRouter:
         for provider_name in list(healthy):
             provider = self.providers[provider_name]
             try:
-                response = await provider.chat(
-                    messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    tools=tools,
-                )
+                # BaseProvider subclasses (from all_providers/extra_providers)
+                # have a different signature: chat(messages, model, max_tokens, temperature, stream)
+                # and expect Message objects, not dicts. They do NOT accept `tools`.
+                # LLMProvider subclasses (Ollama/vLLM/OpenAI in this file)
+                # accept: chat(messages, temperature, max_tokens, tools, stream)
+                import inspect
+                sig = inspect.signature(provider.chat)
+                params = set(sig.parameters.keys())
+
+                if 'tools' in params:
+                    # LLMProvider interface (Ollama, vLLM, OpenAI from this file)
+                    response = await provider.chat(
+                        messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        tools=tools,
+                    )
+                else:
+                    # BaseProvider interface (Groq, Cloudflare, DeepSeek, etc.)
+                    # These expect Message objects, convert dicts -> Message
+                    from ultron.v2.providers.base import Message
+                    converted = []
+                    for m in messages:
+                        if isinstance(m, dict):
+                            converted.append(Message(role=m.get('role', 'user'), content=m.get('content', '')))
+                        else:
+                            converted.append(m)
+                    result = await provider.chat(
+                        converted,
+                        max_tokens=max_tokens or 2048,
+                        temperature=temperature or 0.7,
+                    )
+                    # Convert ProviderResult -> LLMResponse
+                    response = LLMResponse(
+                        content=result.content,
+                        provider=result.provider,
+                        model=result.model,
+                        tokens_used=result.tokens_used,
+                        cost_usd=0.0,
+                        latency_ms=0.0,
+                    )
+
                 logger.info(
                     "LLM response from %s (%s): %.0fms, %d tokens",
                     provider_name,
-                    provider.get_model_name(),
+                    provider.get_model_name() if hasattr(provider, 'get_model_name') else getattr(provider, 'config', {}) and getattr(getattr(provider, 'config', None), 'name', provider_name),
                     response.latency_ms,
                     response.tokens_used,
                 )
@@ -703,13 +738,29 @@ class LLMRouter:
 
         provider = self.providers[provider_name]
         try:
-            async for token in provider.stream_chat(
-                messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                tools=tools,
-            ):
-                yield token
+            import inspect
+            sig = inspect.signature(provider.stream_chat)
+            params = set(sig.parameters.keys())
+
+            if 'tools' in params:
+                async for token in provider.stream_chat(
+                    messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                ):
+                    yield token
+            else:
+                # BaseProvider: convert dicts -> Message, no tools param
+                from ultron.v2.providers.base import Message
+                converted = []
+                for m in messages:
+                    if isinstance(m, dict):
+                        converted.append(Message(role=m.get('role', 'user'), content=m.get('content', '')))
+                    else:
+                        converted.append(m)
+                async for token in provider.stream_chat(converted):
+                    yield token
         except Exception as e:
             logger.warning("Streaming provider %s failed: %s", provider_name, e)
             # Streaming fallback: use non-streaming chat
@@ -779,7 +830,7 @@ class OpenRouterProvider(LLMProvider):
                 api_key=self._api_key,
                 default_headers={
                     "HTTP-Referer": "https://github.com/eren/ultron-assistant",
-                    "X-Title": "Ultron v2.0 — Personal AI Assistant",
+                    "X-Title": "Ultron v2.0 - Personal AI Assistant",
                 },
                 timeout=120.0,
             )

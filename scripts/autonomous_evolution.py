@@ -326,13 +326,13 @@ Bu aracı Ultron v2.1 mimarisine nasıl entegre etmeliyim?
         Adım 0: Gemini ile olan iletişim köprüsünü (Markdown dosyaları) senkronize et.
         """
         logger.info("🤝 AI Köprüsü (Gemini <-> Qwen) kontrol ediliyor...")
-        req_file = Path("gemini_requests.md")
+        req_file = Path("data/gemini_requests.md")
         
         if not req_file.exists():
             return
             
         try:
-            resp_file = Path("qwen_responses.md")
+            resp_file = Path("data/qwen_responses.md")
             if not resp_file.exists():
                 return
                 
