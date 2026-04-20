@@ -106,35 +106,54 @@ export default function ChatArea({
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const getTimeGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { tr: 'Günaydın Efendim', en: 'Good morning, Sir' };
+    if (hour < 18) return { tr: 'Tünaydın Efendim', en: 'Good afternoon, Sir' };
+    if (hour < 22) return { tr: 'İyi akşamlar Efendim', en: 'Good evening, Sir' };
+    return { tr: 'İyi geceler Efendim', en: 'Good night, Sir' };
+  };
+
   return (
     <div
       ref={chatContainerRef}
-      className="flex-1 overflow-y-auto scroll-smooth"
+      className="flex-1 overflow-y-auto scroll-smooth scrollbar-premium"
       style={{ backgroundColor: 'rgb(var(--color-bg))' }}
     >
-      <div className="max-w-5xl mx-auto px-6 py-10 space-y-8">
+      <div 
+        className="max-w-4xl mx-auto px-4 py-8 space-y-8"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+      >
         {messages.length === 0 && !currentResponse ? (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="flex flex-col items-center justify-center min-h-[60vh] text-center"
+            className="flex flex-col items-center justify-center min-h-[55vh] text-center"
           >
             <motion.h2 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-6xl font-bold mb-6 font-serif tracking-tight text-zinc-900 dark:text-zinc-100"
+              className="text-4xl font-bold mb-3 font-serif tracking-tight text-zinc-900 dark:text-zinc-100"
             >
-              Good afternoon, Eren
+              {getTimeGreeting().tr}
+              <span className="block text-xl font-normal text-zinc-400 dark:text-zinc-500 mt-1">
+                {getTimeGreeting().en}
+              </span>
             </motion.h2>
             <motion.p 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="max-w-2xl text-2xl mb-12 text-zinc-500 dark:text-zinc-400 font-medium"
+              className="max-w-md text-base mb-8 text-zinc-500 dark:text-zinc-400 font-medium"
             >
-              How can I help you today?
+              Bugün size nasıl yardımcı olabilirim?
+              <span className="block text-sm font-normal mt-1 italic">
+                How can I help you today?
+              </span>
             </motion.p>
 
             {/* Capability Cards */}
@@ -142,7 +161,7 @@ export default function ChatArea({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-2xl"
+              className="grid grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-lg"
             >
               {[
                 { icon: '💬', title: 'Chat', desc: 'Natural conversation' },
@@ -155,15 +174,15 @@ export default function ChatArea({
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.4 + i * 0.1 }}
-                  whileHover={{ scale: 1.05, y: -2 }}
-                  className="p-4 rounded-xl border cursor-pointer transition-all"
+                  whileHover={{ scale: 1.04, y: -2 }}
+                  className="p-3 rounded-xl border cursor-pointer transition-all"
                   style={{ 
                     backgroundColor: 'rgb(var(--color-card))', 
                     borderColor: 'rgb(var(--color-border))'
                   }}
                 >
-                  <div className="text-2xl mb-2">{item.icon}</div>
-                  <div className="font-semibold text-sm" style={{ color: 'rgb(var(--color-text))' }}>{item.title}</div>
+                  <div className="text-xl mb-1">{item.icon}</div>
+                  <div className="font-semibold text-xs" style={{ color: 'rgb(var(--color-text))' }}>{item.title}</div>
                   <div className="text-xs" style={{ color: 'rgb(var(--color-text-muted))' }}>{item.desc}</div>
                 </motion.div>
               ))}
@@ -206,7 +225,7 @@ export default function ChatArea({
                     )}
 
                     {/* Message Content */}
-                    <div className={`flex-1 max-w-[85%] lg:max-w-3xl ${msg.role === 'user' ? 'order-1' : ''}`}>
+                    <div className={`flex-1 max-w-[85%] min-w-0 ${msg.role === 'user' ? 'order-1' : ''}`}>
                       <div
                         className={
                           msg.role === 'user'
@@ -214,7 +233,7 @@ export default function ChatArea({
                             : 'message-bubble-assistant'
                         }
                       >
-                        <div className="prose prose-sm lg:prose-base max-w-none dark:prose-invert">
+                        <div className="chat-prose">
                           {msg.role === 'user' ? (
                             <p className="whitespace-pre-wrap">{msg.content}</p>
                           ) : (
@@ -330,7 +349,7 @@ export default function ChatArea({
                 </div>
                 <div className="flex-1 max-w-3xl">
                   <div className="message-bubble-assistant">
-                    <div className="prose prose-sm lg:prose-base max-w-none dark:prose-invert">
+                    <div className="chat-prose">
                       <StreamingMessage content={currentResponse} isStreaming={true} />
                     </div>
                   </div>

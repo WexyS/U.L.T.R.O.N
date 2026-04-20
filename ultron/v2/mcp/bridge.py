@@ -37,6 +37,11 @@ class MCPBridge:
         self._allowed_servers: Optional[set[str]] = (
             {x.strip() for x in allowed.split(",") if x.strip()} if allowed else None
         )
+        self._sampling_callback: Optional[callable] = None
+
+    def set_sampling_callback(self, callback: callable) -> None:
+        """Set a callback for LLM sampling requests from MCP servers."""
+        self._sampling_callback = callback
 
     def has_tools(self) -> bool:
         return bool(self._tool_defs)
@@ -142,3 +147,15 @@ class MCPBridge:
         if getattr(result, "isError", False):
             return f"MCP isError: {text}"
         return text
+
+    async def handle_sampling_request(self, server_id: str, prompt: str, max_tokens: int = 1000) -> str:
+        """Handle an LLM sampling request from an MCP server."""
+        if not self._sampling_callback:
+            return "Sampling callback not configured."
+        
+        logger.info("MCP Sampling request from [%s]: %s", server_id, prompt[:100])
+        try:
+            return await self._sampling_callback(prompt, max_tokens)
+        except Exception as e:
+            logger.error("Sampling failed: %s", e)
+            return f"Error during sampling: {str(e)}"

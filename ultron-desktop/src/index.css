@@ -25,7 +25,13 @@
   
   --glass-bg: 255 255 255 / 0.8;
   --glass-border: 230 230 230 / 0.5;
+  --app-font-size: 16px;
 }
+
+.font-size-sm { --app-font-size: 13px; }
+.font-size-md { --app-font-size: 15px; }
+.font-size-lg { --app-font-size: 17px; }
+.font-size-xl { --app-font-size: 20px; }
 
 .dark {
   /* Dark Theme - Claude Aesthetic */
@@ -51,21 +57,16 @@
 }
 
 @layer base {
+  html {
+    font-size: var(--app-font-size);
+  }
   html, body {
     @apply h-full m-0 p-0 overflow-hidden font-sans;
     background-color: rgb(var(--color-bg));
     color: rgb(var(--color-text));
   }
 
-  /* Soften everything - Rounded 3xl as standard */
-  .rounded-xl {
-    @apply rounded-2xl;
-  }
-  
-  .rounded-2xl {
-    @apply rounded-3xl;
-  }
-
+  /* Let components keep their own border-radius */
   * {
     @apply border-[var(--color-border)];
   }
@@ -118,8 +119,19 @@
     @apply px-6 py-4 rounded-[2rem] bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100 max-w-fit shadow-sm;
   }
 
+  .chat-prose {
+    @apply prose max-w-none;
+    font-size: var(--app-font-size);
+    line-height: 1.7;
+  }
+
+  .dark .chat-prose {
+    @apply prose-invert;
+  }
+
   .prose {
     @apply max-w-none;
+    font-size: inherit;
     --tw-prose-body: rgb(var(--color-text));
     --tw-prose-headings: rgb(var(--color-text));
     --tw-prose-links: rgb(var(--color-accent));

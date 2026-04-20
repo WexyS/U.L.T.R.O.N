@@ -72,14 +72,29 @@ class EternalEvolutionEngine:
                 "You are the Ideation Core of Ultron AGI. Your goal is autonomous evolution.\n"
                 f"CURRENT AGENTS: {agent_names}\n"
                 f"CURRENT SKILLS:\n{skill_summary}\n\n"
-                "Suggest EXACTLY ONE simple, non-breaking, contained python feature, agent utility, or new class "
-                "we can add to Ultron's system to bridge a gap or add a new capability. "
-                "Output ONLY the title of the feature."
+                "Suggest THREE distinct, simple, non-breaking features or tools we can add to Ultron. "
+                "One should be a productivity tool, one an AI-utility, and one a system improvement. "
+                "Format as a JSON list of strings."
             )},
-            {"role": "user", "content": "Based on our current capabilities, what is the most useful small feature we should add next?"}
+            {"role": "user", "content": "Brainstorm the next evolution steps for Ultron."}
         ]
-        resp = await self.orchestrator.llm_router.chat(prompt, max_tokens=100)
-        return resp.content.strip()
+        resp = await self.orchestrator.llm_router.chat(prompt, max_tokens=300)
+        try:
+            ideas = json.loads(resp.content.strip())
+            if not isinstance(ideas, list): ideas = [resp.content.strip()]
+        except:
+            ideas = [resp.content.strip()]
+
+        logger.info(f"⚡ [Eternal Evolution] Brainstormed ideas: {ideas}")
+        
+        # Debate to pick the winner
+        debate_prompt = (
+            f"We have three potential features for Ultron's next evolution cycle: {ideas}. "
+            "Analyze which one adds the most value with the least risk to core stability. "
+            "Pick exactly one and provide a clear title."
+        )
+        debate_res = await self.debate_engine.run_debate(debate_prompt, rounds=1)
+        return debate_res["final_answer"].split("\n")[0].strip()
 
     async def _tune_persona(self):
         """Analyze user interactions and refine the system prompt for better 'human' feel."""

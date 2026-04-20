@@ -41,6 +41,7 @@ class AgentRole(str, Enum):
     WHATSAPP = "whatsapp"
     ARCHITECT = "architect"
     GAMING = "gaming"
+    RESOURCER = "resourcer"
 
 
 class AgentStatus(str, Enum):

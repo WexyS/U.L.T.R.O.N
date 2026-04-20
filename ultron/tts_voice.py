@@ -171,7 +171,8 @@ class OpenAITTS:
     def _play_mp3(self, filepath: str) -> None:
         """MP3 dosyasını pygame ile çal."""
         import pygame
-        pygame.mixer.init(frequency=24000, size=-16, channels=1)
+        if not pygame.mixer.get_init():
+            pygame.mixer.init(frequency=24000, size=-16, channels=1)
         pygame.mixer.music.load(filepath)
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy() and not self._stop_event.is_set():
@@ -246,7 +247,8 @@ class EdgeTTS:
                 return
 
             import pygame
-            pygame.mixer.init(frequency=24000, size=-16, channels=1)
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=24000, size=-16, channels=1)
             pygame.mixer.music.load(tmp.name)
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy() and not self._stop_event.is_set():

@@ -183,26 +183,18 @@ class MemoryEngine:
             logger.info("All memory tasks completed")
 
     def search(self, query: str, limit: int = 5, entry_type: Optional[str] = None) -> list[dict]:
-        """Search memories by semantic similarity (SMART CACHING ile).
-        
-        SMART CACHING (İstek #3):
-        - Aynı sorgu 5 dakika içinde arandıysa cache'den dön
-        - %95+ benzerlikte cache kullan
-        - Cache TTL: 5 dakika, Max size: 1000 entry
-        """
-        # Cache key oluştur
+        """Tiered search: 1. Cache -> 2. Vector DB (Recall) -> 3. Graph DB (Archival)."""
+        # 1. SMART CACHING
         cache_key = f"{query}_{entry_type}_{limit}"
-        
-        # Cache kontrol
         cached_result = self._get_from_cache(cache_key)
         if cached_result is not None:
             self._cache_hits += 1
-            logger.debug("Cache HIT: %s (hit rate: %.1f%%)", 
-                        cache_key[:50], self._get_cache_hit_rate())
             return cached_result
         
-        # Cache MISS - ChromaDB'den ara
         self._cache_misses += 1
+        
+        # 2. Vector Search (Recall Memory)
+        vector_results = []
         try:
             kwargs: dict[str, Any] = {
                 "query_texts": [query],
@@ -212,23 +204,37 @@ class MemoryEngine:
                 kwargs["where"] = {"type": entry_type}
 
             results = self._chroma_collection.query(**kwargs)
-            entries = []
             for i, doc_id in enumerate(results.get("ids", [[]])[0]):
-                entries.append({
+                vector_results.append({
                     "id": doc_id,
                     "content": results.get("documents", [[]])[0][i],
                     "metadata": results.get("metadatas", [[]])[0][i],
                     "distance": results.get("distances", [[]])[0][i] if results.get("distances") else None,
+                    "type": "recall"
                 })
-            
-            # Cache'e ekle
-            self._add_to_cache(cache_key, entries)
-            
-            return entries
-            
         except Exception as e:
-            logger.error("Memory search failed: %s", e)
-            return []
+            logger.error("Vector search failed: %s", e)
+
+        # 3. Graph Search (Archival Memory - Facts & Relations)
+        graph_results = []
+        try:
+            # Query the graph for related concepts
+            graph_data = self.query_graph(query, max_depth=2)
+            if graph_data["nodes"]:
+                graph_results.append({
+                    "id": "graph_context",
+                    "content": f"Archival Knowledge Map: {json.dumps(graph_data)}",
+                    "type": "archival"
+                })
+        except Exception:
+            pass
+
+        final_results = vector_results + graph_results
+        
+        # Save to cache
+        self._add_to_cache(cache_key, final_results)
+        
+        return final_results
     
     def _get_from_cache(self, key: str) -> Optional[list[dict]]:
         """Cache'den al (TTL kontrolü ile)"""

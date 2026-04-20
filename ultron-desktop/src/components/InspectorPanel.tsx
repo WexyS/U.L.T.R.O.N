@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/Tabs';
-import { Brain, FolderGit2, Users, ScrollText, Activity, Zap, Wifi, WifiOff } from 'lucide-react';
+import { Brain, FolderGit2, Users, ScrollText, Activity, Zap, Wifi, WifiOff, Box } from 'lucide-react';
 
 interface InspectorPanelProps {
   status: any;
@@ -34,8 +34,9 @@ export default function InspectorPanel({ status, providers, workspace }: Inspect
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-5 gap-1 p-2">
+        <TabsList className="grid grid-cols-6 gap-1 p-2">
           <TabsTrigger value="memory" title="Memory"><Brain className="w-4 h-4" /></TabsTrigger>
+          <TabsTrigger value="mcp" title="MCP Tools"><Box className="w-4 h-4" /></TabsTrigger>
           <TabsTrigger value="workspace" title="Workspace"><FolderGit2 className="w-4 h-4" /></TabsTrigger>
           <TabsTrigger value="agents" title="Agents"><Users className="w-4 h-4" /></TabsTrigger>
           <TabsTrigger value="logs" title="Providers"><ScrollText className="w-4 h-4" /></TabsTrigger>
@@ -45,6 +46,9 @@ export default function InspectorPanel({ status, providers, workspace }: Inspect
         <div className="flex-1 overflow-y-auto p-4">
           <TabsContent value="memory">
             <MemoryTab memory={memory} />
+          </TabsContent>
+          <TabsContent value="mcp">
+            <MCPTab status={status} />
           </TabsContent>
           <TabsContent value="workspace">
             <WorkspaceTab items={workspaceItems} />
@@ -148,6 +152,7 @@ function AgentsTab({ agents }: { agents: Record<string, any> }) {
     { key: 'clipboard', name: 'Clipboard', emoji: '📋' },
     { key: 'meeting', name: 'Meeting', emoji: '🎙️' },
     { key: 'files', name: 'Files', emoji: '📁' },
+    { key: 'resourcer', name: 'Resourcer', emoji: '💎' },
   ];
 
   if (!Object.keys(agents).length) {
@@ -260,6 +265,56 @@ function SystemTab({ status }: { status: any }) {
       <div className="p-3 rounded-lg bg-ultron-card border border-ultron-border">
         <div className="text-xs text-ultron-textMuted mb-1">Event Bus</div>
         <div className="text-sm text-ultron-text font-mono">{events} recent events</div>
+      </div>
+    </div>
+  );
+}
+function MCPTab({ status }: { status: any }) {
+  const mcp = status?.mcp || {};
+  const servers = mcp?.servers || [];
+  const toolsCount = mcp?.total_tools || 0;
+
+  if (!servers.length) {
+    return (
+      <div className="text-xs text-ultron-textMuted text-center py-8">
+        No MCP servers connected. Enable them in config/mcp.yaml.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-ultron-textMuted uppercase">Active Servers</h4>
+        <span className="text-[10px] bg-purple-500/20 text-purple-500 px-1.5 py-0.5 rounded font-bold uppercase">
+          {toolsCount} Tools
+        </span>
+      </div>
+      
+      <div className="space-y-2">
+        {servers.map((srv: any) => (
+          <div key={srv.id} className="p-3 rounded-lg bg-ultron-card border border-ultron-border text-xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-ultron-text font-medium">{srv.id}</span>
+              <span className={`w-2 h-2 rounded-full ${srv.status === 'connected' ? 'bg-ultron-success' : 'bg-ultron-danger'}`} />
+            </div>
+            <div className="text-ultron-textMuted text-[10px] truncate mb-2">
+              {srv.command}
+            </div>
+            {srv.tools && srv.tools.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {srv.tools.slice(0, 5).map((t: string) => (
+                  <span key={t} className="px-1.5 py-0.5 rounded bg-ultron-bg border border-ultron-border text-[9px] text-ultron-textMuted">
+                    {t}
+                  </span>
+                ))}
+                {srv.tools.length > 5 && (
+                  <span className="text-[9px] text-ultron-textMuted self-center">+{srv.tools.length - 5} more</span>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -85,8 +85,10 @@ async def list_conversations(
 
 
 @router.post("")
-async def create_conversation(request: CreateConversationRequest):
+async def create_conversation(request: Optional[CreateConversationRequest] = None):
     """Create a new conversation."""
+    if request is None:
+        request = CreateConversationRequest()
     try:
         from ultron.v2.memory.conversation_store import ConversationStore
         store = ConversationStore()
@@ -142,23 +144,6 @@ async def update_conversation(conversation_id: str, request: UpdateConversationR
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{conversation_id}")
-async def delete_conversation(conversation_id: str):
-    """Delete a conversation and all its messages."""
-    try:
-        from ultron.v2.memory.conversation_store import ConversationStore
-        store = ConversationStore()
-        success = store.delete_conversation(conversation_id)
-        if not success:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        return {"status": "deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to delete conversation: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.delete("/all")
 async def delete_all_conversations():
     """Delete ALL conversations and their messages."""
@@ -176,6 +161,23 @@ async def delete_all_conversations():
         return {"status": "cleared", "deleted": deleted}
     except Exception as e:
         logger.error("Failed to clear all conversations: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    """Delete a conversation and all its messages."""
+    try:
+        from ultron.v2.memory.conversation_store import ConversationStore
+        store = ConversationStore()
+        success = store.delete_conversation(conversation_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete conversation: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

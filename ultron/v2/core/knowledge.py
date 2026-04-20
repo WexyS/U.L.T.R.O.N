@@ -31,13 +31,14 @@ class LocalKnowledgeEngine:
                     content = file_path.read_text(encoding="utf-8", errors="replace")
                     if not content.strip(): continue
                     
-                    # Store in long-term memory (ChromaDB)
-                    await self.memory.add_fact(
+                    # Store in unified memory engine
+                    self.memory.store(
+                        entry_id=f"kb_{hash(str(file_path))}",
                         content=content,
+                        entry_type="technical_doc",
                         metadata={
                             "source": str(file_path),
                             "filename": file_path.name,
-                            "type": "technical_doc",
                             "extension": ext
                         }
                     )
@@ -62,17 +63,21 @@ class LocalKnowledgeEngine:
                     reader = csv.DictReader(f)
                     for i, row in enumerate(reader):
                         content = " | ".join([f"{k}: {v}" for k, v in row.items()])
-                        await self.memory.add_fact(
+                        self.memory.store(
+                            entry_id=f"ds_{hash(str(path))}_{i}",
                             content=content,
-                            metadata={"source": str(path), "row": i, "type": "dataset_row"}
+                            entry_type="dataset_row",
+                            metadata={"source": str(path), "row": i}
                         )
             elif path.suffix == ".json":
                 data = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(data, list):
                     for i, item in enumerate(data):
-                        await self.memory.add_fact(
+                        self.memory.store(
+                            entry_id=f"ds_{hash(str(path))}_{i}",
                             content=json.dumps(item),
-                            metadata={"source": str(path), "index": i, "type": "dataset_item"}
+                            entry_type="dataset_item",
+                            metadata={"source": str(path), "index": i}
                         )
             logger.info(f"Successfully indexed dataset: {path.name}")
         except Exception as e:
@@ -80,7 +85,8 @@ class LocalKnowledgeEngine:
 
     async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Search the local knowledge base for relevant technical info."""
-        results = await self.memory.search_facts(query, limit=limit)
+        # Map to unified search with technical filters
+        results = self.memory.search(query, limit=limit)
         return results
 
     def get_indexed_paths(self) -> List[str]:

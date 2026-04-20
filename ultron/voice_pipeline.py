@@ -589,7 +589,8 @@ class EdgeTTS:
             if self._stop_event.is_set():
                 return
 
-            pygame.mixer.init(frequency=24000, size=-16, channels=1)
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=24000, size=-16, channels=1)
             pygame.mixer.music.load(tmp.name)
             pygame.mixer.music.play()
 
@@ -693,7 +694,8 @@ class VoiceBoxTTS:
             return
             
         try:
-            pygame.mixer.init(frequency=24000, size=-16, channels=1)
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=24000, size=-16, channels=1)
             pygame.mixer.music.load(tmp.name)
             pygame.mixer.music.play()
             

@@ -21,11 +21,11 @@ interface VoiceControlProps {
 export default function VoiceControl({
   onVoiceInput,
   onTTS,
-  isListening,
-  isSpeaking,
   disabled = false,
   language = 'tr-TR',
-}: VoiceControlProps) {
+}: Omit<VoiceControlProps, 'isListening' | 'isSpeaking'>) {
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [recognition, setRecognition] = useState<any>(null);
   const [transcript, setTranscript] = useState('');
@@ -117,6 +117,11 @@ export default function VoiceControl({
 
         recognitionInstance.onend = () => {
           setTranscript('');
+          setIsListening(false);
+        };
+
+        recognitionInstance.onstart = () => {
+          setIsListening(true);
         };
 
         setRecognition(recognitionInstance);

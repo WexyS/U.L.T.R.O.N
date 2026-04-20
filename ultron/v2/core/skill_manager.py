@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import concurrent.futures
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -62,61 +63,69 @@ def _skills_from_manifest(manifest_path: Path) -> list[dict]:
 
 
 def discover_all_skills() -> list[dict]:
-    """Discover all skills from all known directories."""
+    """Discover all skills from all known directories using parallel scanning."""
     skills = []
     search_dirs = [
         Path.home() / ".qwen" / "skills",
+        Path("C:/Users/nemes/.qwen/skills"), # Explicit absolute path for robustness
         Path(__file__).parent.parent.parent / "skills",
         Path(__file__).parent.parent / "skills",
         *_extra_skill_search_dirs(),
     ]
 
-    for search_dir in search_dirs:
-        if not search_dir.is_dir():
-            continue
-        
-        # Use rglob to find all SKILL.md files at any depth
-        for skill_md in search_dir.rglob("SKILL.md"):
-            try:
-                item = skill_md.parent
-                content = skill_md.read_text(encoding="utf-8", errors="replace")
-                # Extract description (first 200 chars or first line)
-                desc = content.split('\n')[0].replace('# Skill:', '').strip() if content.startswith('# Skill:') else content[:200].strip()
-                
-                skills.append({
-                    "name": item.name,
-                    "description": f"Skill: {item.name}. {desc}",
-                    "path": str(item),
-                    "source": str(search_dir),
-                })
-            except Exception as e:
-                logger.debug("Failed to read skill %s: %s", skill_md, e)
-        
-        # Also check for direct .md files (non-recursive for simple files)
-        for item in search_dir.glob("*.md"):
-            if item.name == "SKILL.md" or item.name.startswith("."):
+    def _process_skill_file(skill_md: Path, search_dir: Path) -> Optional[dict]:
+        try:
+            item = skill_md.parent
+            content = skill_md.read_text(encoding="utf-8", errors="replace")
+            desc = content.split('\n')[0].replace('# Skill:', '').strip() if content.startswith('# Skill:') else content[:200].strip()
+            return {
+                "name": item.name,
+                "description": f"Skill: {item.name}. {desc}",
+                "path": str(item),
+                "source": str(search_dir),
+            }
+        except Exception:
+            return None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        for search_dir in search_dirs:
+            if not search_dir.is_dir():
                 continue
-            try:
-                content = item.read_text(encoding="utf-8", errors="replace")
-                desc = content[:200].strip()
-                skills.append({
-                    "name": item.stem,
-                    "description": f"Skill: {item.stem}. {desc}",
-                    "path": str(item),
-                    "source": str(search_dir),
-                })
-            except Exception as e:
-                logger.debug("Failed to read skill file %s: %s", item.name, e)
+            
+            # Find all SKILL.md files
+            skill_files = list(search_dir.rglob("SKILL.md"))
+            future_to_skill = {executor.submit(_process_skill_file, f, search_dir): f for f in skill_files}
+            
+            for future in concurrent.futures.as_completed(future_to_skill):
+                res = future.result()
+                if res:
+                    skills.append(res)
+            
+            # Simple .md files (non-recursive)
+            for item in search_dir.glob("*.md"):
+                if item.name == "SKILL.md" or item.name.startswith("."):
+                    continue
+                try:
+                    content = item.read_text(encoding="utf-8", errors="replace")
+                    desc = content[:200].strip()
+                    skills.append({
+                        "name": item.stem,
+                        "description": f"Skill: {item.stem}. {desc}",
+                        "path": str(item),
+                        "source": str(search_dir),
+                    })
+                except Exception:
+                    pass
 
-    manifest = (os.environ.get("ULTRON_SKILLS_MANIFEST") or "").strip()
-    if manifest:
-        mp = Path(manifest).expanduser()
-        if mp.is_file():
-            for s in _skills_from_manifest(mp):
-                if s["name"] not in {x["name"] for x in skills}:
-                    skills.append(s)
+    # Deduplicate by name
+    seen = set()
+    unique_skills = []
+    for s in skills:
+        if s["name"] not in seen:
+            unique_skills.append(s)
+            seen.add(s["name"])
 
-    return skills
+    return unique_skills
 
 
 def _extra_agent_search_dirs() -> list[Path]:

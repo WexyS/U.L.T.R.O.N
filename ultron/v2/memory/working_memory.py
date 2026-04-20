@@ -27,7 +27,7 @@ class Message:
 
 
 class WorkingMemory:
-    def __init__(self, max_messages: int = 20, max_tokens: int = 12000) -> None:
+    def __init__(self, max_messages: int = 50, max_tokens: int = 32000) -> None:
         self.max_messages = max_messages
         self.max_tokens = max_tokens
         self._deque_maxlen = max(1, max_messages * 2)

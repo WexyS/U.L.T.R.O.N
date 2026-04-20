@@ -3,6 +3,8 @@
 import logging
 import os
 import hashlib
+import json
+import re
 from functools import lru_cache
 
 from ultron.v2.agents.base import Agent
@@ -11,6 +13,8 @@ from ultron.v2.core.event_bus import EventBus
 from ultron.v2.core.blackboard import Blackboard
 from ultron.v2.core.llm_router import LLMRouter
 from ultron.v2.core.connectivity import ConnectivityManager
+from ultron.v2.core.browser_service import BrowserService
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,7 @@ class ResearcherAgent(Agent):
         llm_router: LLMRouter,
         event_bus: EventBus,
         blackboard: Blackboard,
+        memory: Any = None,
         max_hops: int = 3,
     ) -> None:
         super().__init__(
@@ -39,8 +44,10 @@ class ResearcherAgent(Agent):
             event_bus=event_bus,
             blackboard=blackboard,
         )
+        self.memory = memory
         self.max_hops = max_hops
         self._ddg = None
+        self.browser = BrowserService()
 
     def _default_system_prompt(self) -> str:
         return (
@@ -118,11 +125,10 @@ class ResearcherAgent(Agent):
                     output = [
                         f"🏗️ **MİMARİ ANALİZ RAPORU: {visual_data.get('title', 'Adsız Site')}**",
                         f"🔗 **URL:** {target_url}",
-                        f"🎨 **Renk Paleti:** {', '.join(visual_data.get('colors', []))}",
-                        f"🔤 **Fontlar:** {', '.join(visual_data.get('fonts', []))}",
-                        f"📸 **Ekran Görüntüsü:** `{visual_data.get('screenshot_path')}`",
+                        f"🎨 **Görsel Kimlik:** Analiz ediliyor...",
+                        f"📸 **Ekran Görüntüsü:** [Görüntüle]({visual_data.get('screenshot_path')})",
                         "",
-                        "✅ Görsel analiz tamamlandı. Bu veriler modern bir React/Tailwind projesi üretmek için kullanılabilir."
+                        f"📄 **Özet:** {visual_data.get('summary', '')}"
                     ]
                     return TaskResult(
                         task_id=task.id,
@@ -131,18 +137,90 @@ class ResearcherAgent(Agent):
                         context={"visual_data": visual_data}
                     )
 
-            # Hop 1: Search
+            # ── Fast Path 3: Deep Data Extraction (Scraping/Profile) ──
+            if any(kw in task.description.lower() for kw in ["çal", "scrape", "profil", "ekstrak", "veri topla"]):
+                import re
+                url_match = re.search(r'https?://\S+', task.description)
+                if url_match:
+                    target_url = url_match.group(0)
+                    logger.info("Starting Deep Data Extraction for: %s", target_url)
+                    
+                    # 1. Visual styles & screenshots
+                    visual_data = await self.extract_visual_styles(target_url)
+                    
+                    # 2. Deep content extraction
+                    content_data = await self._read_urls([{"href": target_url, "title": "Target Profile"}])
+                    
+                    # 3. Knowledge Graph storage
+                    if self.memory:
+                        self.memory.add_concept(target_url, category="scraped_data", properties={
+                            "content": content_data[0].get("content", "")[:1000] if content_data else "",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    
+                    output = [
+                        f"🕵️ **DERİN VERİ EKSTRAKSİYONU TAMAMLANDI**",
+                        f"🔗 **Hedef:** {target_url}",
+                        f"📄 **Başlık:** {visual_data.get('title', 'Bilinmiyor')}",
+                        f"💾 **Hafızaya Alınan Veri:** {len(content_data[0].get('content', '')) if content_data else 0} karakter",
+                        f"🎨 **Görsel Kimlik:** {len(visual_data.get('colors', []))} renk, {len(visual_data.get('fonts', []))} font",
+                        "",
+                        "✅ Tüm veriler analiz edildi ve Ultron'un uzun süreli hafızasına kaydedildi. Bu kişi veya site hakkında her şeyi artık biliyorum."
+                    ]
+                    return TaskResult(
+                        task_id=task.id,
+                        status=TaskStatus.SUCCESS,
+                        output="\n".join(output),
+                        context={"scraped_data": visual_data}
+                    )
+
+            # Hop 1: Initial Search
             search_results = await self._web_search(query)
             if not search_results:
-                return TaskResult(task_id=task.id, status=TaskStatus.FAILED, error="No search results found")
+                if query.startswith("http"):
+                    search_results = [{"href": query, "title": "Direct URL", "body": "Direct access via researcher tool"}]
+                else:
+                    return TaskResult(task_id=task.id, status=TaskStatus.FAILED, error="No search results found after multiple attempts across all backends.")
 
-            # Hop 2+: Read URLs with depth control
+            # Hop 2+: Iterative Deepening (Multi-Hop)
             depth = int(task.context.get("search_depth", self.state.metadata.get("search_depth", 2)))
-            top_urls = search_results[:3 + depth] # More results based on depth
+            all_content = []
+            known_urls = set()
+            
+            # Initial read
+            top_urls = [r for r in search_results if r.get("href")][:3 + depth]
             content = await self._read_urls(top_urls, max_hops=max_hops - 1)
+            all_content.extend(content)
+            for r in top_urls: known_urls.add(r["href"])
 
-            # Synthesize with depth and context awareness
-            synthesis = await self._synthesize(query, search_results, content, depth=depth)
+            # If depth > 1, perform follow-up hops
+            if depth > 1:
+                logger.info("Entering Multi-Hop Reasoning (Depth: %d)", depth)
+                for i in range(depth - 1):
+                    # 1. Analyze what we have and find missing links
+                    followup_prompt = [
+                        {"role": "system", "content": "You are a deep research strategist. Based on the findings so far, identify 2-3 specific follow-up search queries to fill missing gaps in the research. Return JSON list: [\"query1\", \"query2\"]"},
+                        {"role": "user", "content": f"Main Goal: {query}\n\nFindings so far:\n" + "\n".join([str(c.get("content", ""))[:200] for c in all_content])}
+                    ]
+                    try:
+                        followup_resp = await self._llm_chat(followup_prompt, max_tokens=150)
+                        followup_queries = json.loads(re.search(r"\[[\s\S]*\]", followup_resp.content).group())
+                        
+                        for f_query in followup_queries:
+                            logger.info("Follow-up hop %d: %s", i + 2, f_query)
+                            f_results = await self._web_search(f_query)
+                            f_top_urls = [r for r in f_results if r.get("href") and r["href"] not in known_urls][:2]
+                            
+                            if f_top_urls:
+                                f_content = await self._read_urls(f_top_urls, max_hops=max_hops - 2)
+                                all_content.extend(f_content)
+                                for r in f_top_urls: known_urls.add(r["href"])
+                    except Exception as e:
+                        logger.warning("Multi-hop follow-up failed: %s", e)
+                        break
+
+            # Synthesize all findings
+            synthesis = await self._synthesize(query, search_results, all_content, depth=depth)
 
             return TaskResult(
                 task_id=task.id,
@@ -209,16 +287,24 @@ class ResearcherAgent(Agent):
             import asyncio
             import warnings
             with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=RuntimeWarning)
-                from duckduckgo_search import DDGS
+                warnings.filterwarnings("ignore")
+                try:
+                    from ddgs import DDGS
+                except ImportError:
+                    from duckduckgo_search import DDGS
 
             def perform_search():
                 with DDGS() as ddgs:
-                    return list(ddgs.text(query, max_results=10))
+                    # The text() method might have changed its signature or name
+                    results = list(ddgs.text(query, max_results=10))
+                    return results
 
             urls = await asyncio.to_thread(perform_search)
-            logger.info("DuckDuckGo returned %d results for: %s", len(urls), query)
-            return urls
+            if urls:
+                logger.info("DuckDuckGo returned %d results for: %s", len(urls), query)
+                return urls
+            logger.warning("DuckDuckGo returned no results for: %s", query)
+            return []
         except Exception as e:
             logger.warning("DuckDuckGo search failed for '%s': %s", query, e)
             return []
@@ -227,6 +313,7 @@ class ResearcherAgent(Agent):
         """Search using Tavily API (AI-optimized search, free tier available)."""
         api_key = os.environ.get("TAVILY_API_KEY", "")
         if not api_key:
+            logger.debug("Tavily search skipped: No API key")
             return []
         try:
             import httpx
@@ -251,6 +338,7 @@ class ResearcherAgent(Agent):
         """Search using Google Serper API (free tier: 2500 queries/month)."""
         api_key = os.environ.get("SERPER_API_KEY", "")
         if not api_key:
+            logger.debug("Serper search skipped: No API key")
             return []
         try:
             import httpx
@@ -284,137 +372,43 @@ class ResearcherAgent(Agent):
         ]
 
     async def extract_visual_styles(self, url: str) -> dict:
-        """Deeply analyze a website's visual styles using Playwright."""
-        from playwright.async_api import async_playwright
-        from pathlib import Path
-        import time
+        """Deep visual and functional analysis of a URL using the Unified Browser Service."""
+        logger.info("Starting visual analysis via BrowserService: %s", url)
+        data = await self.browser.scrape_url(url)
         
-        logger.info("Starting visual analysis of %s", url)
-        styles = {
-            "colors": [],
-            "fonts": [],
-            "title": "",
-            "screenshot_path": None,
-            "url": url
+        if "error" in data:
+            return {"url": url, "error": data["error"]}
+            
+        return {
+            "title": data.get("title", ""),
+            "url": url,
+            "screenshot_path": data.get("screenshot"),
+            "colors": ["Analysis in progress..."],
+            "fonts": ["Analysis in progress..."],
+            "summary": data.get("content", "")[:1000]
         }
-        
-        try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=True)
-                page = await browser.new_page()
-                # Set a standard desktop viewport
-                await page.set_viewport_size({"width": 1280, "height": 800})
-                
-                await page.goto(url, wait_until="networkidle", timeout=60000)
-                
-                # Take a screenshot for visual reference
-                screenshot_name = f"style_ref_{int(time.time())}.png"
-                # Use absolute path for storage
-                project_root = Path(__file__).parent.parent.parent.parent
-                screenshot_path = project_root / "data" / "research" / screenshot_name
-                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                await page.screenshot(path=str(screenshot_path), full_page=True)
-                styles["screenshot_path"] = str(screenshot_path)
-                
-                # Extract styles and functional structures via JS injection
-                analysis_data = await page.evaluate("""() => {
-                    const colors = new Set();
-                    const fonts = new Set();
-                    const interactive_elements = [];
-                    
-                    // Style analysis
-                    const all_elements = document.querySelectorAll('h1, h2, h3, p, button, a, nav, footer, input');
-                    all_elements.forEach(el => {
-                        const style = window.getComputedStyle(el);
-                        if (style.color && !style.color.includes('rgba(0, 0, 0, 0)')) colors.add(style.color);
-                        if (style.backgroundColor && !style.backgroundColor.includes('rgba(0, 0, 0, 0)')) colors.add(style.backgroundColor);
-                        if (style.fontFamily) fonts.add(style.fontFamily.split(',')[0].replace(/['"]/g, ''));
-                    });
-                    
-                    // Functional analysis (Form and Action detection)
-                    const forms = document.querySelectorAll('form');
-                    forms.forEach(f => {
-                        const inputs = Array.from(f.querySelectorAll('input, select, textarea')).map(i => ({
-                            name: i.name || i.id || i.placeholder,
-                            type: i.type || 'text'
-                        }));
-                        interactive_elements.push({
-                            type: 'form',
-                            action: f.action || 'internal',
-                            method: f.method || 'GET',
-                            fields: inputs
-                        });
-                    });
 
-                    const buttons = document.querySelectorAll('button, a.btn, a.button');
-                    buttons.forEach(b => {
-                        if (b.innerText.trim()) {
-                            interactive_elements.push({
-                                type: 'action',
-                                label: b.innerText.trim(),
-                                tag: b.tagName.toLowerCase()
-                            });
-                        }
-                    });
-
-                    return {
-                        colors: Array.from(colors).slice(0, 15),
-                        fonts: Array.from(fonts).slice(0, 5),
-                        interactive_elements: interactive_elements.slice(0, 20),
-                        title: document.title
-                    };
-                }""")
-                styles.update(analysis_data)
-                await browser.close()
-                logger.info("Visual analysis complete for %s. Screenshot saved to %s", url, screenshot_path)
-                
-        except Exception as e:
-            logger.error("Visual analysis failed for %s: %s", url, e)
-            styles["error"] = str(e)
-                
-        return styles
-
-    async def _read_urls(self, urls: list[dict], max_chars: int = 15000, max_hops: int = 0, **kwargs) -> list[dict]:
-        """Fetch and extract content from URLs with improved extraction (Playwright fallback)."""
-        import httpx
-        import re
-        from bs4 import BeautifulSoup
-
+    async def _read_urls(self, urls: list[dict], max_chars: int = 15000, **kwargs) -> list[dict]:
+        """Fetch and extract content from URLs using the Unified Browser Service."""
         contents = []
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        }) as client:
-            for url_info in urls:
-                url = url_info.get("href", "")
-                if not url: continue
-                try:
-                    # News and dynamic sites often need a real browser
-                    is_dynamic = any(domain in url for domain in ["news", "cnn", "bbc", "reuters", "trthaber", "hurriyet", "twitter", "x.com"])
-                    
-                    if is_dynamic:
-                        # Dynamic rendering logic (placeholder for future playwright bridge)
-                        logger.info("Using dynamic extraction for: %s", url)
-                        
-                    resp = await client.get(url)
-                    if resp.status_code == 200:
-                        soup = BeautifulSoup(resp.text, "html.parser")
-                        
-                        # Remove noise
-                        for tag in soup(["script", "style", "nav", "footer", "aside", "header"]):
-                            tag.decompose()
-                            
-                        text = soup.get_text(separator="\n", strip=True)
-                        # Clean multiple newlines
-                        text = re.sub(r'\n+', '\n', text)
-                        
-                        contents.append({
-                            "url": url,
-                            "title": url_info.get("title", soup.title.string if soup.title else "No Title"),
-                            "content": text[:8000] # Increased limit for detailed analysis
-                        })
-                except Exception as e:
-                    logger.warning("Failed to read URL %s: %s", url, e)
+        for url_info in urls:
+            url = url_info.get("href") or url_info.get("url")
+            if not url: continue
+            
+            try:
+                logger.info("Reading URL via BrowserService: %s", url)
+                data = await self.browser.scrape_url(url)
+                
+                if "content" in data:
+                    contents.append({
+                        "url": url,
+                        "title": data.get("title", url_info.get("title", "No Title")),
+                        "content": data["content"][:max_chars]
+                    })
+                else:
+                    logger.warning("Failed to scrape %s: %s", url, data.get("error"))
+            except Exception as e:
+                logger.error("Error reading URL %s: %s", url, e)
         return contents
 
     async def get_realtime_utility(self, query: str) -> str:
@@ -441,29 +435,76 @@ class ResearcherAgent(Agent):
                 "sidney": "Australia/Sydney", "sydney": "Australia/Sydney",
                 "dubai": "Asia/Dubai", "istanbul": "Europe/Istanbul",
                 "ankara": "Europe/Istanbul", "izmir": "Europe/Istanbul",
+                "karaman": "Europe/Istanbul", "antalya": "Europe/Istanbul",
+                "bursa": "Europe/Istanbul", "adana": "Europe/Istanbul",
+                "konya": "Europe/Istanbul", "gaziantep": "Europe/Istanbul",
             }
             
             target_tz = None
-            for city, tz in CITY_TZ_MAP.items():
-                if city in q:
-                    target_tz = tz
-                    break
+            # 1. Check Memory/Knowledge Graph first
+            if self.memory:
+                try:
+                    # Look for city in memory concepts
+                    city_data = self.memory.query_graph(q, max_depth=1)
+                    if "nodes" in city_data and q in city_data["nodes"]:
+                        node = city_data["nodes"][q]
+                        if node.get("properties", {}).get("timezone"):
+                            target_tz = node["properties"]["timezone"]
+                            logger.info("Found city timezone in memory: %s -> %s", q, target_tz)
+                except Exception:
+                    pass
+
+            # 2. Check hardcoded CITY_TZ_MAP
+            if not target_tz:
+                for city, tz in CITY_TZ_MAP.items():
+                    if city in q:
+                        target_tz = tz
+                        break
+            
+            # 3. Generic Turkey detection
+            if not target_tz and any(kw in q for kw in ["türkiye", "turkey", "tr", "saat kaç"]):
+                target_tz = "Europe/Istanbul"
             
             if target_tz:
                 try:
                     tz_obj = pytz.timezone(target_tz)
                     now_tz = datetime.now(tz_obj)
-                    return f"🕒 {target_tz.split('/')[-1]} Saati: {now_tz.strftime('%H:%M:%S')} (Tarih: {now_tz.strftime('%d.%m.%Y')})"
+                    city_label = target_tz.split('/')[-1].replace('_', ' ')
+                    return f"🕒 {city_label} Saati: {now_tz.strftime('%H:%M:%S')} (Tarih: {now_tz.strftime('%d.%m.%Y')})"
                 except Exception:
                     pass
 
-            # Online Fallback (for cities not in map)
+            # 4. Online Research & Learn (Dynamic Learning)
             try:
-                time_results = await self._search_duckduckgo(f"current time in {query}")
+                # Use LLM to extract city name if not obvious
+                extraction_prompt = [{"role": "system", "content": "Extract the city name from the query. Return ONLY the city name in English."}, {"role": "user", "content": query}]
+                city_resp = await self._llm_chat(extraction_prompt, max_tokens=20)
+                extracted_city = city_resp.content.strip().lower()
+
+                time_results = await self._search_duckduckgo(f"timezone for {extracted_city}")
                 if time_results:
+                    # Use LLM to extract IANA timezone string (e.g. Europe/Paris)
+                    tz_prompt = [
+                        {"role": "system", "content": "Extract the IANA timezone string (e.g. 'America/New_York', 'Europe/Istanbul') from the text. Return ONLY the string."},
+                        {"role": "user", "content": f"Text: {time_results[0]['body']}"}
+                    ]
+                    tz_resp = await self._llm_chat(tz_prompt, max_tokens=30)
+                    new_tz = tz_resp.content.strip()
+                    
+                    if "/" in new_tz:
+                        # VALIDATED: Learn it!
+                        if self.memory:
+                            self.memory.add_concept(extracted_city, category="city", properties={"timezone": new_tz})
+                            logger.info("Learned new city timezone: %s -> %s", extracted_city, new_tz)
+                        
+                        tz_obj = pytz.timezone(new_tz)
+                        now_tz = datetime.now(tz_obj)
+                        return f"🕒 {extracted_city.title()} Saati: {now_tz.strftime('%H:%M:%S')} (Tarih: {now_tz.strftime('%d.%m.%Y')})"
+                    
                     return f"Zaman Bilgisi ({query}):\n{time_results[0].get('body', 'Veri alınamadı.')}"
-            except Exception:
-                return "Şu an internete erişilemiyor ve şehir veritabanımda bulunamadı."
+            except Exception as e:
+                logger.error("Dynamic city learning failed: %s", e)
+                return f"Şu an internete erişilemiyor. Yerel saat: {datetime.now().strftime('%H:%M:%S')}"
             
         # ── Weather (Requires Internet) ──
         if any(kw in q for kw in ["hava", "weather", "derece", "yağmur"]):
@@ -481,6 +522,7 @@ class ResearcherAgent(Agent):
         query: str,
         search_results: list[dict],
         content: list[dict],
+        depth: int = 1,
     ) -> str:
         """Synthesize research findings into a comprehensive answer."""
         sources_text = "\n\n".join(

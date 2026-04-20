@@ -16,6 +16,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     voiceMode: localStorage.getItem('ultron-voice-mode') === 'true',
     searchDepth: parseInt(localStorage.getItem('ultron-search-depth') || '2'),
     model: localStorage.getItem('ultron-model') || 'qwen2.5:32b',
+    language: localStorage.getItem('ultron-language') || 'tr',
     notifications: true,
   });
 
@@ -25,6 +26,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     localStorage.setItem('ultron-voice-mode', String(settings.voiceMode));
     localStorage.setItem('ultron-search-depth', String(settings.searchDepth));
     localStorage.setItem('ultron-model', settings.model);
+    localStorage.setItem('ultron-language', settings.language);
 
     // Sync with backend
     try {
@@ -117,6 +119,21 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               </div>
               <p className="text-xs text-zinc-500">Enable or disable the real-time voice assistant.</p>
             </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-zinc-700 dark:text-zinc-300">Language (Dil)</span>
+                <select 
+                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={settings.language}
+                  onChange={(e) => handleChange('language', e.target.value)}
+                >
+                  <option value="tr">Türkçe 🇹🇷</option>
+                  <option value="en">English 🇺🇸</option>
+                </select>
+              </div>
+              <p className="text-xs text-zinc-500">Select the primary language for Ultron's interface and agents.</p>
+            </div>
           </div>
         </section>
 
@@ -138,7 +155,8 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   value={settings.model}
                   onChange={(e) => handleChange('model', e.target.value)}
                 >
-                  <option value="qwen2.5:14b">Qwen 2.5 14B (Fast)</option>
+                  <option value="qwen2.5-coder:14b">Qwen 2.5 Coder 14B (Fast)</option>
+                  <option value="qwen3-coder:30b">Qwen 3 Coder 30B (Genius)</option>
                   <option value="qwen2.5:32b">Qwen 2.5 32B (Balanced)</option>
                   <option value="qwen2.5:72b">Qwen 2.5 72B (Powerful)</option>
                   <option value="gemini-2.0-flash">Gemini 2.0 Flash (Remote)</option>

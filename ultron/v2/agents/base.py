@@ -14,7 +14,7 @@ from ultron.v2.core.llm_router import LLMRouter, LLMResponse
 logger = logging.getLogger(__name__)
 
 
-class Agent(ABC):
+class BaseAgent(ABC):
     """Base class for all Ultron agents.
 
     Each agent:
@@ -41,6 +41,15 @@ class Agent(ABC):
         self.system_prompt = system_prompt or self._default_system_prompt()
 
         self._running = False
+
+    def update_status(self, status: Any) -> None:
+        """Update the agent or task status."""
+        from ultron.v2.core.types import AgentStatus
+        if isinstance(status, AgentStatus):
+            self.state.status = status
+        # Update last active timestamp
+        from datetime import datetime
+        self.state.last_active = datetime.now()
 
     @abstractmethod
     def _default_system_prompt(self) -> str:
@@ -149,3 +158,6 @@ class Agent(ABC):
         """Store context on the blackboard."""
         role_name = self.role.value if hasattr(self.role, "value") else str(self.role)
         await self.blackboard.write(key, value, owner=role_name, ttl_seconds=ttl)
+
+# Alias for backward compatibility
+Agent = BaseAgent

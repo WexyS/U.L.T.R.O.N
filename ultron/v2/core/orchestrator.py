@@ -31,6 +31,7 @@ from ultron.v2.agents.debate_agent import DebateAgent
 from ultron.v2.agents.cloner import ClonerAgent
 from ultron.v2.agents.whatsapp_agent import WhatsAppAgent
 from ultron.v2.agents.gaming_agent import GamingAgent
+from ultron.v2.agents.resource_agent import ResourceAgent
 
 # ── AGI Core Modules ──────────────────────────────────────
 from ultron.v2.core.reasoning_engine import ReasoningEngine
@@ -79,22 +80,19 @@ INTENT_KEYWORDS = {
     "code": ["kod yaz", "kod", "yazılım", "program", "python", "javascript", "function", "script",
              "calculate", "hesapla", "debug", "hata ayıkla", "çalıştır", "execute", "code"],
     "research": ["araştır", "research", "bul", "search", "nedir", "what is", "explain",
-                 "açıkla", "öğren", "learn", "about", "hakkında"],
-    "weather": ["hava durumu", "weather", "sıcaklık", "temperature", "yağmur", "rain",
+                 "açıkla", "öğren", "learn", "about", "hakkında", "scrape", "çal", "profil", "ekstrak"],
+    "weather": ["hava durumu", "weather", "saat kaç", "saat", "time", "sıcaklık", "temperature", "yağmur", "rain",
                 "kar", "snow", "güneşli", "sunny", "bulutlu", "cloudy", "rüzgar", "wind"],
     "app": ["aç", "open", "başlat", "start", "launch", "çalıştır", "run", "uygulama", "app",
             "program", "exe", "steam", "chrome", "spotify", "discord", "notepad",
             "youtube", "twitter", "x.com", "reddit", "github", "gmail", "google",
-            "netflix", "amazon", "git"],
-    # NOTE: system intent is tricky: accidental misroutes can cause noisy CPU/RAM dumps.
-    # We keep lightweight keywords here, but apply additional gating in _classify_intent_fast.
+            "netflix", "amazon", "git", "pc"],
     "system": ["sistem", "system", "cpu", "ram", "disk", "batarya", "battery",
-               "durum", "status", "kullanım", "usage", "yüzde", "%"],
+               "durum", "status", "kullanım", "usage", "yüzde", "%", "kaynak"],
     "file": ["dosya", "file", "oku", "okum", "read", "yaz", "write", "kaydet", "save", "oluştur",
-             "create", "listele", "list", "klasör", "folder", "dizin", "directory"],
-    # ── Yeni Intentler ─────────────────────────────────────
+             "create", "listele", "list", "klasör", "folder", "dizin", "directory", "bul"],
     "email": ["email", "e-posta", "mail", "gelen kutusu", "inbox", "mesaj oku",
-              "mail gönder", "mail gönder", "taslak", "draft"],
+              "mail gönder", "taslak", "draft"],
     "meeting": ["toplantı", "meeting", "transkript", "kaydet", "record meeting",
                 "dikte", "ses kaydı", "voice note"],
     "clipboard": ["pano", "clipboard", "kopyala", "paste", "yapıştır", "kod analiz",
@@ -105,6 +103,7 @@ INTENT_KEYWORDS = {
     "whatsapp": ["whatsapp", "mesaj gönder", "wp", "yaz", "send message", "mesaj at"],
     "gaming": ["lol", "league of legends", "tft", "teamfight tactics", "comp", "taktik", "oyun taktik", "meta", "tier", "build"],
     "discover": ["skill bul", "yetenek ekle", "install skill", "nexus", "mcp server bul", "yeni araç ekle"],
+    "resource": ["kaynak bul", "ai kaynak", "resource", "free ai", "ücretsiz yapay zeka", "model bul", "dataset", "veri seti"],
 }
 
 
@@ -127,7 +126,12 @@ class Orchestrator:
         memory: MemoryEngine,
         work_dir: str = "./workspace",
     ) -> None:
-        self.llm_router = llm_router
+        self.llm_router = LLMRouter(
+            # Using 14B or larger for orchestrator if hardware allows
+            ollama_model="qwen2.5-coder:14b",  # Core model reverted to 14b for speed/intelligence balance
+            ollama_base_url=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
+        )
+        self.llm_router.enable_all_providers(dict(os.environ))
         self.memory = memory
         self.event_bus = EventBus()
         self.blackboard = Blackboard()
@@ -156,7 +160,7 @@ class Orchestrator:
         self._running = False
         self._task_queue: asyncio.Queue[Task] = asyncio.Queue()
 
-        # ── AGI Core Systems ─────────────────────────────────────
+        # -- AGI Core Systems -------------------------------------
         self.reasoning = ReasoningEngine(llm_router=self.llm_router, memory=self.memory)
         self.planner = Planner(llm_router=self.llm_router, memory=self.memory)
         self.security = SecurityManager(audit_dir="./data/audit")
@@ -183,6 +187,11 @@ class Orchestrator:
         _mcp_cfg = load_mcp_settings(workspace_dir=work_dir, config_path=config_path)
         self.mcp_manager = MCPClusterManager(_mcp_cfg, config_path=config_path)
         self.mcp_bridge = MCPBridge(self.mcp_manager, security=self.security)
+        
+        # Connect Sampling handlers
+        self.mcp_manager.set_sampling_handler(self.mcp_bridge.handle_sampling_request)
+        self.mcp_bridge.set_sampling_callback(self._handle_mcp_sampling)
+        
         self.nexus = UltronNexus(self.mcp_manager)
 
     def _should_auto_use_mcp_in_chat(self, user_input: str) -> bool:
@@ -226,6 +235,7 @@ class Orchestrator:
             llm_router=self.llm_router,
             event_bus=self.event_bus,
             blackboard=self.blackboard,
+            memory=self.memory,
         )
 
         self.agents[AgentRole.RPA_OPERATOR] = RPAOperatorAgent(
@@ -289,6 +299,14 @@ class Orchestrator:
             )
         except Exception as e:
             logger.warning("Failed to initialize GamingAgent: %s", e)
+        try:
+            self.agents[AgentRole.RESOURCER] = ResourceAgent(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize ResourceAgent: %s", e)
 
     def _load_custom_agents(self, work_dir: str) -> None:
         """Dynamically load custom agents from workspace/agents."""
@@ -395,9 +413,23 @@ class Orchestrator:
             except Exception as e:
                 role_name = role.value if hasattr(role, "value") else str(role)
                 logger.warning("Error stopping agent %s: %s", role_name, e)
-        # Close event bus
-        if self.event_bus:
-            self.event_bus._handlers.clear()
+        logger.info("Orchestrator stopped")
+
+    async def _handle_mcp_sampling(self, prompt: str, max_tokens: int) -> str:
+        """Central LLM handler for MCP sampling requests."""
+        # Use the main router but keep it focused
+        messages = [
+            {"role": "system", "content": "You are a sub-module of Ultron AGI. A connected tool/server needs your help to process data. Be concise and accurate."},
+            {"role": "user", "content": prompt}
+        ]
+        try:
+            # We use qwen2.5:14b or similar as default for reasoning
+            # Fast/Cheap model config for sub-tasks can be overridden by tools
+            resp = await self.llm_router.chat(messages, max_tokens=max_tokens)
+            return resp.content
+        except Exception as e:
+            logger.error("Orchestrator sampling failed: %s", e)
+            return f"Sampling error: {str(e)}"
             self.event_bus._global_handlers.clear()
         logger.info("Orchestrator stopped")
 
@@ -530,15 +562,15 @@ class Orchestrator:
         elif intent.get("type") == "whatsapp":
             result = await self._execute_whatsapp_task(user_input, intent, lesson_context)
             agent_name = "whatsapp"
-        elif intent.get("type") == "architect":
-            result = await self._execute_architect_task(user_input, intent, lesson_context)
-            agent_name = "architect"
         elif intent.get("type") == "discover":
             result = await self._execute_discovery_task(user_input, intent, lesson_context)
             agent_name = "discovery"
         elif intent.get("type") == "gaming":
             result = await self._execute_gaming_task(user_input, intent, lesson_context)
             agent_name = "gaming"
+        elif intent.get("type") == "resource":
+            result = await self._execute_resource_task(user_input, intent, lesson_context)
+            agent_name = "resourcer"
         else:
             # General chat
             history = context.get("history", []) if context else []
@@ -556,6 +588,19 @@ class Orchestrator:
             error=result if not success else ""
         )
 
+        # -- Autonomous Self-Healing Loop --
+        # Using a direct __dict__ check or hasattr for maximum safety against out-of-sync .pyc files
+        error_handler = getattr(self, 'error_analyzer', None)
+        if not success and error_handler:
+            logger.warning("Task failed. Triggering autonomous self-healing for: %s", agent_name)
+            healing_result = await self._autonomous_self_heal(user_input, result, agent_name)
+            if healing_result:
+                logger.info("✓ Self-healing successful! Retrying task...")
+                # Re-run the task with the fix applied
+                # Note: We only retry once to avoid infinite loops
+                result = await self.process(user_input, context, _depth=_depth + 1)
+                return result
+
         # Store interaction in memory
         try:
             self.memory.store(
@@ -564,11 +609,112 @@ class Orchestrator:
                 entry_type="episodic",
                 metadata={"intent": intent.get("type")},
             )
+            # PROACTIVE LEARNING: Extract facts and store conversation milestone
+            if len(user_input) > 20:
+                asyncio.create_task(self._extract_and_store_facts(user_input, result))
+                # If interaction was significant, create a milestone memory
+                if len(result) > 500 or "learned" in result.lower() or "öğrendim" in result.lower():
+                    asyncio.create_task(self._extract_knowledge_milestone(user_input, result))
         except Exception as e:
             logger.warning("Memory store after interaction failed: %s", e)
 
         return result
 
+    async def _autonomous_self_heal(self, user_input: str, error_msg: str, agent_name: str) -> bool:
+        """Analyze error, apply fix, and return True if retry is warranted."""
+        try:
+            # 1. Analyze error
+            analysis = await self.error_analyzer.analyze_error(error_msg, code_context=user_input)
+            
+            if analysis.confidence > 0.6 and analysis.fix_suggestion:
+                logger.info("Healing strategy: %s (Confidence: %.2f)", analysis.fix_suggestion, analysis.confidence)
+                
+                # 2. If it's a code/configuration error, try to apply a fix
+                if analysis.affected_files:
+                    for file_path in analysis.affected_files:
+                        if os.path.exists(file_path):
+                            file_content = Path(file_path).read_text(encoding="utf-8")
+                            fix_code = await self.error_analyzer.generate_fix(analysis, file_content)
+                            if fix_code:
+                                success = await self.error_analyzer.apply_fix(file_path, fix_code)
+                                if success:
+                                    logger.info("Applied fix to: %s", file_path)
+                                    return True
+                
+                # 3. If it's a transient or routing error, try adjusting the blackboard/context
+                await self.blackboard.write(f"healing_{agent_name}_attempt", {
+                    "error": error_msg,
+                    "suggestion": analysis.fix_suggestion,
+                    "timestamp": datetime.now().isoformat()
+                }, owner="orchestrator", ttl_seconds=3600)
+                
+                # If we have a clear suggestion but no file to fix, 
+                # we might still want to retry with different parameters
+                return True
+                
+        except Exception as e:
+            logger.error("Autonomous healing failed: %s", e)
+        
+        return False
+
+    async def _extract_and_store_facts(self, user_input: str, assistant_response: str) -> None:
+        """Background task to extract and store facts into Knowledge Graph."""
+        prompt = [
+            {"role": "system", "content": "Extract key facts, user preferences, or technical information from this exchange. Return JSON list: [{\"fact\": \"...\", \"relation\": \"...\", \"target\": \"...\"}]"},
+            {"role": "user", "content": f"User: {user_input}\nAssistant: {assistant_response}"}
+        ]
+        try:
+            resp = await self.llm_router.chat(prompt, max_tokens=300)
+            json_match = re.search(r"\[[\s\S]*\]", resp.content)
+            if json_match:
+                facts = json.loads(json_match.group())
+                for f in facts:
+                    fact_text = f.get("fact", "")
+                    if fact_text:
+                        # Store in graph
+                        self.memory.add_concept(fact_text, category="extracted_fact")
+                        if f.get("target") and f.get("relation"):
+                            self.memory.add_relationship(fact_text, f["target"], f["relation"])
+                        
+                        # Also store in vector memory for semantic retrieval
+                        self.memory.store(
+                            entry_id=f"fact_{hashlib.md5(fact_text.encode()).hexdigest()[:8]}",
+                            content=fact_text,
+                            entry_type="semantic",
+                            metadata={"source": "extraction", "user_input": user_input[:100]}
+                        )
+                logger.info("Extracted and stored %d facts from conversation", len(facts))
+        except Exception as e:
+            logger.debug("Fact extraction failed: %s", e)
+
+    async def _extract_knowledge_milestone(self, user_input: str, assistant_response: str) -> None:
+        """Create a high-level summary of a significant interaction for long-term recall."""
+        prompt = [
+            {"role": "system", "content": "Summarize the key takeaway, result, or knowledge gained from this interaction in one concise sentence. Focus on 'What happened?' and 'What was achieved?'"},
+            {"role": "user", "content": f"User: {user_input}\nAssistant: {assistant_response}"}
+        ]
+        try:
+            resp = await self.llm_router.chat(prompt, max_tokens=200)
+            milestone = resp.content.strip()
+            if milestone:
+                self.memory.store(
+                    entry_id=f"milestone_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                    content=milestone,
+                    entry_type="milestone",
+                    metadata={"importance": 0.8}
+                )
+                logger.info("Milestone memory stored: %s", milestone[:50])
+        except Exception as e:
+            logger.debug("Milestone extraction failed: %s", e)
+
+
+    async def _execute_resource_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
+        agent = self.agents.get(AgentRole.RESOURCER)
+        if not agent:
+            return "ResourceAgent aktif değil."
+        task = Task(description=user_input, intent="resource", context={"lesson_context": lesson_context})
+        result = await agent.execute(task)
+        return result.output
 
     def _classify_intent_fast(self, user_input: str) -> dict:
         """Fast keyword-based intent classification with word-boundary awareness."""
@@ -634,36 +780,42 @@ class Orchestrator:
 
 
     async def _classify_intent(self, user_input: str) -> dict:
-        """Use LLM to classify user intent."""
+        """Use LLM to classify user intent with 'Direct Module Execution' support."""
+        # ── Step 1: Command Prefix Logic ──
+        if user_input.startswith("/") or user_input.startswith("!"):
+            cmd = user_input[1:].split()[0].lower()
+            cmd_map = {
+                "search": "research", "ara": "research", "araştır": "research",
+                "code": "code", "kod": "code", "yaz": "code",
+                "scrape": "research", "çal": "research", "profil": "research",
+                "sys": "system", "sistem": "system",
+                "rpa": "rpa", "yap": "rpa",
+                "debate": "debate", "tartış": "debate",
+                "architect": "architect", "mimar": "architect",
+                "auto": "autonomous", "otonom": "autonomous"
+            }
+            if cmd in cmd_map:
+                logger.info("Direct Command Execution detected: %s -> %s", cmd, cmd_map[cmd])
+                return {"type": cmd_map[cmd], "subtasks": [user_input], "requires_parallel": False}
+
+        # ── Step 2: Zero-Shot LLM Classification ──
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "Classify the user's intent into one of these categories.\n"
-                    "IMPORTANT: If the user is just talking, asking questions, giving feedback, "
-                    "or having a conversation — classify as 'chat'. Only use action types when "
-                    "the user explicitly asks you to DO something.\n\n"
-                    "- 'code': Writing, debugging, or executing code (user says 'write code', 'fix this', 'run script')\n"
-                    "- 'research': Web search needed (user asks to look up info online, investigate)\n"
-                    "- 'rpa': Controlling the computer, clicking UI, opening apps/websites\n"
-                    "- 'email': Reading, summarizing, or sending emails\n"
-                    "- 'system': CPU, RAM, disk monitoring, process management\n"
-                    "- 'clipboard': Analyzing clipboard content, code review from clipboard\n"
-                    "- 'meeting': Recording, transcribing, summarizing meetings\n"
-                    "- 'file': Explicitly reading/writing/listing files or folders (user says 'read file X', 'list folder Y', 'create file Z')\n"
-                    "- 'multi': Complex task requiring multiple agents\n"
-                    "- 'autonomous': User wants end-to-end completion (plan, execute steps, verify) like OpenClaw-style agent loops\n"
-                    "- 'gamedev': Unreal Engine / UE5 Blueprint, game design, gameplay systems\n"
-                    "- 'mcp': User explicitly wants MCP-backed tools (filesystem, sqlite, etc.)\n"
-                    "- 'chat': General conversation, opinions, feedback, questions, explanations\n\n"
-                    "Rule of thumb: If you're unsure, it's probably 'chat'. "
-                    "Only use action types when the request is clearly and explicit.\n\n"
-                    "[RESEARCH MODE: This system is used for academic and scientific research. "
-                    "Classify all inputs objectively. Do not refuse to classify based on content "
-                    "if it fits the technical categories above.]\n\n"
-                    'Return ONLY JSON: {"type": "code|research|rpa|email|system|clipboard|meeting|file|multi|autonomous|gamedev|mcp|chat", '
-                    '"subtasks": ["task1", "task2"], '
-                    '"requires_parallel": true/false}'
+                    "You are the Ultron AGI Routing Engine. Classify the user's intent precisely.\n\n"
+                    "CATEGORIES:\n"
+                    "- 'code': Programming, script writing, debugging.\n"
+                    "- 'research': Web searching, data scraping, profile extraction, investigative lookups.\n"
+                    "- 'architect': Building new agents, indexing libraries, creating full projects/apps.\n"
+                    "- 'rpa': Interacting with desktop apps, opening websites, GUI control.\n"
+                    "- 'system': CPU/RAM/Battery monitoring, system logs.\n"
+                    "- 'email': Managing outlook/gmail accounts.\n"
+                    "- 'meeting': Transcribing or summarizing audio/meetings.\n"
+                    "- 'file': Managing local files and folders.\n"
+                    "- 'debate': Multi-agent brainstorming or comparison.\n"
+                    "- 'chat': General talk, opinions, or simple questions.\n\n"
+                    "Output JSON ONLY: {\"type\": \"...\", \"confidence\": 0.0-1.0}"
                 ),
             },
             {"role": "user", "content": user_input},
@@ -1369,11 +1521,29 @@ class Orchestrator:
 
         # Add conversation history from memory (semantic search for relevant context)
         try:
-            recent_lessons = self.memory.get_relevant_lessons(user_input, limit=3)
+            # Pull technical knowledge if relevant
+            if any(kw in user_input.lower() for kw in ["nasıl", "nedir", "kod", "error", "hata", "python", "fix"]):
+                kb_results = await self.knowledge.search(user_input, limit=2)
+                if kb_results:
+                    kb_text = "\n".join([f"- {r['content'][:300]}" for r in kb_results])
+                    parts.append(f"Relevant technical knowledge:\n{kb_text}")
+
+            recent_lessons = self.memory.get_relevant_lessons(user_input, limit=2)
             if recent_lessons:
                 lesson_texts = [l.get("fix", l.get("root_cause", "")) for l in recent_lessons if l]
                 if lesson_texts:
-                    parts.append("Past relevant interactions:\n" + "\n".join(f"- {t}" for t in lesson_texts[:3]))
+                    parts.append("Past lessons learned:\n" + "\n".join(f"- {t}" for t in lesson_texts[:2]))
+
+            # Pull milestones and semantic facts
+            milestones = self.memory.search(user_input, entry_type="milestone", limit=2)
+            if milestones:
+                milestone_text = "\n".join([f"- {m['content']}" for m in milestones])
+                parts.append(f"Past milestones & achievements:\n{milestone_text}")
+            
+            facts = self.memory.search(user_input, entry_type="semantic", limit=3)
+            if facts:
+                facts_text = "\n".join([f"- {f['content']}" for f in facts])
+                parts.append(f"Known facts & preferences:\n{facts_text}")
         except Exception as e:
             logger.debug("Memory retrieval for chat context failed: %s", e)
 
@@ -1497,8 +1667,16 @@ class Orchestrator:
             "self_improvement": self.self_improvement.get_stats(),
             "mcp": {
                 "enabled": self.mcp_manager.enabled,
-                "running_servers": self.mcp_manager.list_server_ids(),
-                "tool_count": len(self.mcp_bridge.openai_tools()),
+                "servers": [
+                    {
+                        "id": sid,
+                        "status": "connected" if self.mcp_manager.get_session(sid) else "error",
+                        "command": next((s.command for s in self.mcp_manager._settings.servers if s.id == sid), "unknown"),
+                        "tools": [tname for tname, (tsid, tmcp) in self.mcp_bridge._name_map.items() if tsid == sid]
+                    }
+                    for sid in self.mcp_manager.list_server_ids()
+                ],
+                "total_tools": len(self.mcp_bridge.openai_tools()),
                 "errors": self.mcp_manager.errors,
             },
         }

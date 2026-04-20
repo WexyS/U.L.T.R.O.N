@@ -25,6 +25,11 @@ class MCPClusterManager:
         self._sessions: dict[str, "ClientSession"] = {}
         self._started = False
         self._errors: dict[str, str] = {}
+        self._sampling_handler: Optional[callable] = None
+
+    def set_sampling_handler(self, handler: callable) -> None:
+        """Set a global sampling handler for all MCP sessions."""
+        self._sampling_handler = handler
 
     @property
     def enabled(self) -> bool:
@@ -79,6 +84,18 @@ class MCPClusterManager:
                 read_write = await self._stack.enter_async_context(stdio_client(params))
                 read, write = read_write
                 session = await self._stack.enter_async_context(ClientSession(read, write))
+                
+                # Attach sampling handler if provided
+                if self._sampling_handler:
+                    from mcp.types import CreateMessageRequest
+                    
+                    async def _wrap_sampling(request: CreateMessageRequest):
+                        # Extract prompt from messages
+                        prompt = "\n".join([m.content.text for m in request.messages if hasattr(m.content, "text")])
+                        return await self._sampling_handler(srv.id, prompt, request.maxTokens or 1000)
+                    
+                    session.set_request_handler(CreateMessageRequest, _wrap_sampling)
+
                 await session.initialize()
                 self._sessions[srv.id] = session
                 logger.info("MCP sunucu hazır: %s (%s)", srv.id, srv.command)
@@ -133,6 +150,17 @@ class MCPClusterManager:
             read_write = await self._stack.enter_async_context(stdio_client(params))
             read, write = read_write
             session = await self._stack.enter_async_context(ClientSession(read, write))
+            
+            # Attach sampling handler if provided
+            if self._sampling_handler:
+                from mcp.types import CreateMessageRequest
+                
+                async def _wrap_sampling(request: CreateMessageRequest):
+                    prompt = "\n".join([m.content.text for m in request.messages if hasattr(m.content, "text")])
+                    return await self._sampling_handler(server_def.id, prompt, request.maxTokens or 1000)
+                
+                session.set_request_handler(CreateMessageRequest, _wrap_sampling)
+
             await session.initialize()
             
             self._sessions[server_def.id] = session

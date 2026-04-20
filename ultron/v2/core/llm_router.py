@@ -114,11 +114,12 @@ class OllamaProvider(LLMProvider):
         return self._model
 
     def is_available(self) -> bool:
-        if self._available is not None:
-            return self._available
+        """Check if Ollama is accessible. Reactive check (no long-term caching)."""
         try:
             import httpx
-            resp = httpx.get(f"{self._base_url}/api/tags", timeout=3)
+            # Use 127.0.0.1 for better compatibility on Windows
+            url = self._base_url.replace("localhost", "127.0.0.1")
+            resp = httpx.get(f"{url}/api/tags", timeout=2)
             self._available = resp.status_code == 200
             return self._available
         except Exception:
@@ -449,6 +450,9 @@ class LLMRouter:
         ollama_base_url: str = "http://localhost:11434",
         vllm_base_url: str = "http://localhost:8000/v1",
     ) -> None:
+        # Normalize model names to handle common mismatches
+        if ollama_model == "qwen3.0-coder:30b":
+            ollama_model = "qwen3-coder:30b"
         self.providers: dict[str, LLMProvider] = {}
         self.priority_order: list[str] = []
 
@@ -480,6 +484,10 @@ class LLMRouter:
     def update_config(self, model: Optional[str] = None, **kwargs):
         """Dynamically update router configuration."""
         if model:
+            # Normalize model name for common typos/versions
+            if model == "qwen3.0-coder:30b":
+                model = "qwen3-coder:30b"
+                
             if "ollama" in self.providers:
                 # Update Ollama model
                 self.providers["ollama"]._model = model
@@ -542,8 +550,11 @@ class LLMRouter:
             from ultron.v2.providers.all_providers import GeminiProvider
             self.providers["gemini"] = GeminiProvider(api_key=api_key, model=model)
             if "gemini" not in self.priority_order:
-                # Prioritize Gemini near the top as it is high quality and free
-                self.priority_order.insert(0, "gemini")
+                # Put Gemini at index 1 if Groq is already at 0 (Groq is faster and avoids 429s)
+                idx = 0
+                if self.priority_order and self.priority_order[0] == "groq":
+                    idx = 1
+                self.priority_order.insert(idx, "gemini")
                 logger.info("Google Gemini enabled (%s) - FREE, 1M context", model)
 
     def enable_cloudflare(self, api_key: str, account_id: str, model: str = "@cf/meta/llama-3.1-8b-instruct"):
