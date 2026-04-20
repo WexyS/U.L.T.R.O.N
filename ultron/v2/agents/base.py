@@ -57,13 +57,15 @@ class Agent(ABC):
         self._running = True
         self.state.status = AgentStatus.IDLE
         await self._subscribe_events()
-        logger.info("Agent %s started", self.role.value)
+        role_name = self.role.value if hasattr(self.role, "value") else str(self.role)
+        logger.info("Agent %s started", role_name)
 
     async def stop(self) -> None:
         """Stop the agent."""
         self._running = False
         self.state.status = AgentStatus.OFFLINE
-        logger.info("Agent %s stopped", self.role.value)
+        role_name = self.role.value if hasattr(self.role, "value") else str(self.role)
+        logger.info("Agent %s stopped", role_name)
 
     @abstractmethod
     async def _subscribe_events(self) -> None:
@@ -87,7 +89,8 @@ class Agent(ABC):
 
     async def _publish_event(self, event_name: str, data: Optional[dict] = None) -> None:
         """Publish an event on behalf of this agent."""
-        await self.event_bus.publish_simple(event_name, self.role.value, data or {})
+        role_name = self.role.value if hasattr(self.role, "value") else str(self.role)
+        await self.event_bus.publish_simple(event_name, role_name, data or {})
 
     def _build_messages(self, user_content: str, system_prompt: Optional[str] = None) -> list[dict]:
         """Build a standard chat message list."""
@@ -144,4 +147,5 @@ class Agent(ABC):
 
     async def store_context(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """Store context on the blackboard."""
-        await self.blackboard.write(key, value, owner=self.role.value, ttl_seconds=ttl)
+        role_name = self.role.value if hasattr(self.role, "value") else str(self.role)
+        await self.blackboard.write(key, value, owner=role_name, ttl_seconds=ttl)

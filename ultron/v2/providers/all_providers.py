@@ -11,6 +11,7 @@ import json
 from typing import Optional, AsyncIterator
 
 import httpx
+from datetime import datetime
 
 from .base import BaseProvider, Message, ProviderConfig, ProviderResult
 
@@ -129,7 +130,6 @@ class GeminiProvider(BaseProvider):
                 parts.append({"text": msg.content})
             contents.append({"role": role, "parts": parts})
 
-        from datetime import datetime
         start = time.monotonic()
         self.stats.total_calls += 1
         url = f"{self.config.base_url}/{m}:generateContent?key={self.config.api_key}"
@@ -274,7 +274,7 @@ class HFProvider(BaseProvider):
 
     async def chat(self, messages, model=None, max_tokens=2048, temperature=0.7, stream=False) -> ProviderResult:
         m = model or self.config.default_model
-        prompt = "\n".join(f"{m['role']}: {m['content']}" for m in messages)
+        prompt = "\n".join(f"{msg.role}: {msg.content}" for msg in messages)
         async with httpx.AsyncClient(timeout=self.config.timeout) as c:
             r = await c.post(
                 f"{self.config.base_url}/{m}",
@@ -300,12 +300,14 @@ HuggingFaceProvider = HFProvider
 class OpenRouterProvider(BaseProvider):
     """OpenRouter — tek key ile 200+ model. OpenAI-uyumlu endpoint."""
 
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("OPENROUTER_API_KEY")
+        md = model or os.getenv("OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
         super().__init__(ProviderConfig(
             name="openrouter",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
+            api_key=ak,
             base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
-            default_model=os.getenv("OPENROUTER_DEFAULT_MODEL", "anthropic/claude-3-haiku"),
+            default_model=md,
             max_tokens=4096, timeout=60, priority=3
         ))
 
@@ -369,12 +371,14 @@ class OpenRouterProvider(BaseProvider):
 class OpenAIProvider(BaseProvider):
     """OpenAI — ücretli, son çare fallback. openai paketi yerine httpx ile."""
 
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        ak = api_key or os.getenv("OPENAI_API_KEY")
+        md = model or os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
         super().__init__(ProviderConfig(
             name="openai",
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=ak,
             base_url="https://api.openai.com/v1",
-            default_model=os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini"),
+            default_model=md,
             max_tokens=4096, timeout=60, priority=8
         ))
 

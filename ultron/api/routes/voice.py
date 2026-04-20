@@ -1,4 +1,4 @@
-\"\"\"Voice API routes — Endpoints for controlling the voice module.\"\"\"
+"""Voice API routes — Endpoints for controlling the voice module."""
 import os
 import subprocess
 import logging
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/v2/voice", tags=["voice"])
 
 @router.post("/launch")
 async def launch_voice_mode():
-    \"\"\"Launch the standalone voice mode (start-voice.bat).\"\"\"
+    """Launch the standalone voice mode (start-voice.bat)."""
     try:
         # Resolve path to start-voice.bat
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -20,9 +20,10 @@ async def launch_voice_mode():
         
         # Launch in a new process without blocking the API
         # On Windows, use 'start' to open a new terminal window
-        subprocess.Popen(["cmd", "/c", "start", "cmd", "/k", bat_path], cwd=base_dir)
+        subprocess.Popen(["cmd", "/c", "start", "cmd", "/c", bat_path], cwd=base_dir)
         
         return {"status": "success", "message": "Voice mode launched in a new window"}
     except Exception as e:
         logger.error(f"Failed to launch voice mode: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+

@@ -47,13 +47,13 @@ start /b cmd /c "npm run dev"
 echo.
 echo ============================================================
 echo   ULTRON AGI SISTEMI AKTIF! ✨🚀
-echo   Dashboard: http://localhost:5173
+echo   Dashboard: https://localhost:5174
 echo ============================================================
 echo.
 
 :: Open Dashboard
-timeout /t 2 >nul
-start http://localhost:5173
+timeout /t 3 >nul
+start https://localhost:5174
 
 :: Keep alive
 pause >nul

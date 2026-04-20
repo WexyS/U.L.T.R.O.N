@@ -125,8 +125,8 @@ export default function TrainingPanel() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Model Training</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>Fine-tune LLMs with LlamaFactory</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>Ultron Neural Lab</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>Ultron-Native Neural Core Fine-Tuning Engine</p>
         </div>
         <button
           onClick={() => { fetchStatus(); fetchJobs(); }}

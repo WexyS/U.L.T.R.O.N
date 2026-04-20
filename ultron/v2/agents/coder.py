@@ -12,6 +12,7 @@ from ultron.v2.core.types import AgentRole, AgentStatus, Task, TaskResult, TaskS
 from ultron.v2.core.event_bus import EventBus
 from ultron.v2.core.blackboard import Blackboard
 from ultron.v2.core.llm_router import LLMRouter
+from ultron.v2.core.error_analyzer import ErrorAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,12 @@ class CoderAgent(Agent):
                     max_iterations,
                     error[:200],
                 )
-                code = await self._fix_code(code, task.description, error)
+                
+                # Use ErrorAnalyzer for diagnostics
+                analysis = ErrorAnalyzer.analyze(error)
+                diagnostic_context = f"Error Type: {analysis['error_type']}\nExplanation: {analysis['explanation']}\nSuggested Fix: {analysis['suggested_fix']}"
+                
+                code = await self._fix_code(code, f"{task.description}\n\nDIAGNOSTICS:\n{diagnostic_context}", error)
                 await self._publish_event("code_fix_attempt", {
                     "task_id": task.id,
                     "iteration": iteration + 1,

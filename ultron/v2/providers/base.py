@@ -73,6 +73,13 @@ class BaseProvider(ABC):
         """API key var mı? Yoksa bu provider atlanır."""
         return bool(self.config.api_key) or self.config.name == "ollama"
 
+    @property
+    def display_name(self) -> str:
+        return f"Ultron-Channel-{self.config.name.capitalize()}"
+
+    def get_model_name(self) -> str:
+        return self.config.default_model
+
     @abstractmethod
     async def chat(
         self,

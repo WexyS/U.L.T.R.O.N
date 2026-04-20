@@ -154,7 +154,7 @@ app = FastAPI(title="Ultron v2.0 API", version="2.1.0", lifespan=lifespan)
 # ── Security: CORS — scoped origins, not "*" ──────────────────────────
 ALLOWED_ORIGINS = os.getenv(
     "ULTRON_ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173",
+    "http://localhost:5173,http://localhost:5174,https://localhost:5173,https://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174"
 ).split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -197,6 +197,29 @@ app.include_router(training_router)
 app.include_router(conversations_router)
 app.include_router(composer_router)
 app.include_router(voice_router)
+
+# ── Config API ────────────────────────────────────────────────────────
+class ConfigUpdateRequest(BaseModel):
+    model: Optional[str] = None
+    search_depth: Optional[int] = None
+    autonomous_evolution: Optional[bool] = None
+
+@app.post("/api/v2/config/update")
+async def update_config(req: ConfigUpdateRequest):
+    orch = await get_orchestrator()
+    if not orch:
+        raise HTTPException(status_code=503, detail="Orchestrator not ready")
+    
+    if req.model:
+        orch.llm_router.update_config(model=req.model)
+    
+    if req.search_depth:
+        # Map search depth (1-5) to reasoning steps (4-20)
+        steps = req.search_depth * 4
+        orch.reasoning.max_reasoning_steps = steps
+        logger.info("Config: Updated reasoning max_steps to %d", steps)
+        
+    return {"status": "success", "message": "Configuration updated successfully"}
 
 # Workspace models — needed for endpoint type hints
 from ultron.v2.workspace.models import CloneRequest, GenerateRequest, SynthesizeRequest, OpenFolderRequest
@@ -465,7 +488,7 @@ async def openguider_chat(req: OpenGuiderRequest, request: Request):
         if not _orchestrator:
             return JSONResponse(status_code=503, content={"error": "Orchestrator not ready yet."})
             
-        agent = _orchestrator.agents.get(AgentRole.OPENGUIDER_BRIDGE)
+        agent = _orchestrator.agents.get(AgentRole.VISION)
         if not agent:
             # Fallback to standard process if bridge not registered
             result = await _orchestrator.process(req.message)
@@ -531,9 +554,9 @@ async def text_to_speech(req: TTSRequest, request: Request):
         voice = req.voice
         if not voice:
             if req.language == "tr":
-                voice = "tr-TR-EmelNeural"
+                voice = "tr-TR-AhmetNeural"
             else:
-                voice = "en-US-JennyNeural"
+                voice = "en-GB-RyanNeural"
 
         # Stream audio chunks directly
         communicate = edge_tts.Communicate(req.text, voice)

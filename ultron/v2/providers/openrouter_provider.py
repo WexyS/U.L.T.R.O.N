@@ -19,7 +19,7 @@ class OpenRouterProvider(BaseProvider):
             name="openrouter",
             api_key=os.getenv("OPENROUTER_API_KEY"),
             base_url="https://openrouter.ai/api/v1",
-            default_model=os.getenv("OPENROUTER_DEFAULT_MODEL", "anthropic/claude-3-haiku"),
+            default_model=os.getenv("OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
             timeout=60,
             priority=3,
         )

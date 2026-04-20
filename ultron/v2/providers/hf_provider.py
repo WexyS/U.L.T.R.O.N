@@ -36,7 +36,7 @@ class HFProvider(BaseProvider):
         start = time.time()
 
         # HF Inference API takes a single string input
-        prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
+        prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in messages])
 
         retries = 2
         for attempt in range(retries + 1):

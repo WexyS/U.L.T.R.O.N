@@ -29,6 +29,8 @@ class LLMResponse:
     tool_calls: Optional[list[dict[str, Any]]] = None
 
 
+from ultron.v2.core.error_analyzer import ErrorAnalyzer
+from ultron.v2.core.connectivity import ConnectivityManager
 from ultron.v2.providers.base import ProviderStats
 
 
@@ -68,6 +70,27 @@ class LLMProvider(ABC):
     @abstractmethod
     def name(self) -> str:
         ...
+
+    @property
+    def display_name(self) -> str:
+        mapping = {
+            "ollama": "Ultron Native Core",
+            "vllm": "Ultron Neural Accelerator",
+            "openai": "Ultron Intelligence Cloud (Alpha)",
+            "gemini": "Ultron Intelligence Cloud (Beta)",
+            "anthropic": "Ultron Intelligence Cloud (Prime)",
+            "groq": "Ultron Warp Speed Channel",
+            "openrouter": "Ultron Universal Bridge",
+            "openrouter_free": "Ultron Universal Bridge (Free)",
+            "together": "Ultron Neural Network (Shared)",
+            "huggingface": "Ultron Research Node",
+            "cloudflare": "Ultron Edge Intelligence",
+            "deepseek": "Ultron Deep Reasoning Node",
+            "mistral": "Ultron Euro-Neural Node",
+            "cohere": "Ultron Contextual Node",
+            "fireworks": "Ultron Burst Intelligence",
+        }
+        return mapping.get(self.name, f"Ultron-Channel-{self.name.capitalize()}")
 
 
 class OllamaProvider(LLMProvider):
@@ -144,7 +167,7 @@ class OllamaProvider(LLMProvider):
 
             return LLMResponse(
                 content=content,
-                provider=self.name,
+                provider=self.display_name,
                 model=self._model,
                 latency_ms=latency,
                 finish_reason="stop",
@@ -253,7 +276,7 @@ class VLLMProvider(LLMProvider):
 
             return LLMResponse(
                 content=content,
-                provider=self.name,
+                provider=self.display_name,
                 model=self._model,
                 tokens_used=response.usage.total_tokens if response.usage else 0,
                 latency_ms=latency,
@@ -375,7 +398,7 @@ class OpenAIProvider(LLMProvider):
 
             return LLMResponse(
                 content=content,
-                provider=self.name,
+                provider=self.display_name,
                 model=self._model,
                 tokens_used=getattr(usage, 'total_tokens', 0),
                 cost_usd=input_cost + output_cost,
@@ -454,10 +477,22 @@ class LLMRouter:
 
         self._active_provider: Optional[str] = None
 
-    def enable_openrouter(self, api_key: str, model: str = "google/gemini-2.0-flash-exp:free"):
+    def update_config(self, model: Optional[str] = None, **kwargs):
+        """Dynamically update router configuration."""
+        if model:
+            if "ollama" in self.providers:
+                # Update Ollama model
+                self.providers["ollama"]._model = model
+                logger.info("LLMRouter: Updated Ollama model to %s", model)
+            if "openai" in self.providers and model.startswith("gpt"):
+                # Update OpenAI model
+                self.providers["openai"]._model = model
+                logger.info("LLMRouter: Updated OpenAI model to %s", model)
+
+    def enable_openrouter(self, api_key: str, model: str = "meta-llama/llama-3.1-8b-instruct:free"):
         """Add OpenRouter as a smart routing provider.
 
-        Default model changed to Gemini 2.0 Flash (free) — much better Turkish support.
+        Default model changed to Llama 3.1 8B Instruct (free).
         """
         if api_key and api_key.startswith("sk-or-"):
             # Add FREE model router first — no credits needed!
@@ -615,32 +650,41 @@ class LLMRouter:
                 self.priority_order.append("openai")
 
     def get_healthy_providers(self) -> list[str]:
-        """Get list of available providers in priority order, excluding those currently failing (Circuit Breaker)."""
+        """Get list of available providers in priority order, excluding those currently failing."""
         healthy = []
+        is_online = ConnectivityManager.is_online()
+        
         for name in self.priority_order:
             provider = self.providers.get(name)
             if not provider:
                 continue
             
+            # Skip external providers if offline
+            if name not in ("ollama", "vllm") and not is_online:
+                continue
+            
             # Check circuit breaker limit (max 3 consecutive failures)
             if hasattr(provider, 'stats') and hasattr(provider.stats, 'consecutive_failures'):
                 if getattr(provider.stats, 'consecutive_failures') >= 3:
-                    # After 10 minutes (increased from 5), let it try again
                     last_active = getattr(provider.stats, 'last_active')
                     if last_active and (datetime.now() - last_active).total_seconds() < 600:
-                        logger.warning(f"Provider {name} is rate-limited or circuit-broken. Skipping for cooldown.")
                         continue
                     else:
-                        # Reset to allow a retry
+                        # Reset for retry
                         setattr(provider.stats, 'consecutive_failures', 0)
-
-            # Handle both BaseProvider (is_configured) and LLMProvider (is_available)
-            if hasattr(provider, 'is_configured'):
-                available = provider.is_configured()
-            else:
-                available = provider.is_available()
-            if available:
-                healthy.append(name)
+            
+            # Check availability
+            try:
+                if hasattr(provider, 'is_configured'):
+                    available = provider.is_configured()
+                else:
+                    available = provider.is_available()
+                
+                if available:
+                    healthy.append(name)
+            except Exception:
+                continue
+                
         return healthy
 
     @property
@@ -727,7 +771,7 @@ class LLMRouter:
 
                 logger.info(
                     "LLM response from %s (%s): %.0fms, %d tokens",
-                    provider_name,
+                    provider.display_name,
                     provider.get_model_name() if hasattr(provider, 'get_model_name') else provider_name,
                     response.latency_ms,
                     response.tokens_used,

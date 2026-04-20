@@ -20,9 +20,14 @@ class UltronDesktop(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ULTRON v2.1 TACTICAL INTERFACE")
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowMinimizeButtonHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.resize(1000, 700)
+        
+        self.drag_pos = None
+        self._is_processing = False
+        self.current_lang = "TR"
+        self.chat_history = []
         
         self.init_ui()
         self.load_theme()
@@ -67,12 +72,20 @@ class UltronDesktop(QMainWindow):
         title_box.addWidget(title_label)
         title_box.addWidget(subtitle_label)
         
-        close_btn = QPushButton("EXIT CORE")
-        close_btn.setFixedSize(90, 30)
-        close_btn.clicked.connect(self.exit_system)
-        
         header_layout.addLayout(title_box)
         header_layout.addStretch()
+        
+        minimize_btn = QPushButton("_")
+        minimize_btn.setFixedSize(30, 30)
+        minimize_btn.setObjectName("MinimizeBtn")
+        minimize_btn.clicked.connect(self.showMinimized)
+        
+        close_btn = QPushButton("X")
+        close_btn.setFixedSize(30, 30)
+        close_btn.setObjectName("CloseBtn")
+        close_btn.clicked.connect(self.exit_system)
+        
+        header_layout.addWidget(minimize_btn)
         header_layout.addWidget(close_btn)
         main_layout.addLayout(header_layout)
         
@@ -158,11 +171,16 @@ class UltronDesktop(QMainWindow):
         self.btn_listen.setMinimumHeight(40)
         self.btn_listen.clicked.connect(self.toggle_listening)
         
+        self.btn_lang = QPushButton("LANGUAGE: TR")
+        self.btn_lang.setMinimumHeight(40)
+        self.btn_lang.clicked.connect(self.toggle_language)
+        
         self.btn_test = QPushButton("DIAGNOSTICS CYCLE")
         self.btn_test.setMinimumHeight(40)
         self.btn_test.clicked.connect(self.run_test_protocol)
         
         controls_layout.addWidget(self.btn_listen)
+        controls_layout.addWidget(self.btn_lang)
         controls_layout.addWidget(self.btn_test)
         
         main_layout.addLayout(controls_layout)
@@ -203,6 +221,11 @@ class UltronDesktop(QMainWindow):
         self.reactor.set_state("processing")
         QTimer.singleShot(2000, lambda: self.reactor.set_state("idle"))
 
+    def toggle_language(self):
+        self.current_lang = "EN" if self.current_lang == "TR" else "TR"
+        self.btn_lang.setText(f"LANGUAGE: {self.current_lang}")
+        self.log_message(f"> LANGUAGE SET TO {self.current_lang}")
+
     def toggle_listening(self):
         if not self.hotword.running:
             self.btn_listen.setText("AUDIO PROTOCOL ONLINE")
@@ -216,15 +239,94 @@ class UltronDesktop(QMainWindow):
             self.hotword.stop()
 
     def on_wake_word_triggered(self):
+        if self._is_processing:
+            return
         self.log_message("> WAKE WORD DETECTED. INITIATING CORE DIRECTIVES.")
-        asyncio.ensure_future(self.simulate_thinking())
+        self.reactor.set_state("listening")
+        asyncio.ensure_future(self.process_voice_interaction())
 
-    async def simulate_thinking(self):
-        self.log_message("> ANALYZING REQUEST...")
-        self.reactor.set_state("processing")
-        await asyncio.sleep(3)
-        self.log_message("> ACTIONS DISPATCHED TO AGENT SWARM.")
-        self.reactor.set_state("listening") if self.hotword.running else self.reactor.set_state("idle")
+    async def process_voice_interaction(self):
+        self._is_processing = True
+        try:
+            import speech_recognition as sr
+            import httpx
+            import pygame
+            import io
+            import os
+            from tempfile import NamedTemporaryFile
+
+            # 1. Listen for command
+            recognizer = sr.Recognizer()
+            with sr.Microphone() as source:
+                self.log_message("> SPEAK NOW...")
+                audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
+            
+            self.reactor.set_state("processing")
+            self.log_message("> TRANSCRIBING AUDIO...")
+            
+            # 2. STT
+            try:
+                lang_code = "tr-TR" if self.current_lang == "TR" else "en-US"
+                user_text = recognizer.recognize_google(audio, language=lang_code)
+                self.log_message(f"> USER ({self.current_lang}): {user_text}")
+            except Exception as e:
+                self.log_message(f"> STT ERROR: {e}")
+                self.reactor.set_state("idle")
+                self._is_processing = False
+                return
+
+            # 3. Chat with Backend
+            self.chat_history.append({"role": "user", "content": user_text})
+            self.log_message("> CONSULTING ULTRON CORE...")
+            sys_msg = "Please reply strictly in Turkish." if self.current_lang == "TR" else "Please reply strictly in English."
+            
+            # Combine system message with last 10 messages of history
+            messages_payload = [{"role": "system", "content": sys_msg}] + self.chat_history[-10:]
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                chat_resp = await client.post("http://localhost:8000/api/v2/chat", json={
+                    "messages": messages_payload
+                })
+                if chat_resp.status_code == 200:
+                    data = chat_resp.json()
+                    ai_text = data.get("content", "I am unable to process that.")
+                    self.chat_history.append({"role": "assistant", "content": ai_text})
+                    self.log_message(f"> ULTRON: {ai_text}")
+                else:
+                    ai_text = "Backend communication failed."
+                    self.log_message("> ERROR: Backend unreachable.")
+
+            # 4. TTS
+            self.log_message("> SYNTHESIZING RESPONSE...")
+            tts_lang = "tr" if self.current_lang == "TR" else "en"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                tts_resp = await client.post("http://localhost:8000/api/v2/tts", json={
+                    "text": ai_text,
+                    "language": tts_lang
+                })
+                if tts_resp.status_code == 200:
+                    # Play Audio via Pygame
+                    with NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+                        f.write(tts_resp.content)
+                        temp_path = f.name
+                    
+                    pygame.mixer.init()
+                    pygame.mixer.music.load(temp_path)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        await asyncio.sleep(0.1)
+                    pygame.mixer.quit()
+                    
+                    try: os.remove(temp_path)
+                    except: pass
+                else:
+                    self.log_message("> ERROR: TTS service failed.")
+
+        except Exception as e:
+            self.log_message(f"> VOICE SYSTEM ERROR: {e}")
+        finally:
+            self._is_processing = False
+            self.reactor.set_state("listening") if self.hotword.running else self.reactor.set_state("idle")
 
     def run_test_protocol(self):
         self.log_message("RUNNING DIAGNOSTICS CYCLE...")

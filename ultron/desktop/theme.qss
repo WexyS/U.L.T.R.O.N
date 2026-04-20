@@ -49,3 +49,36 @@ QPushButton:hover {
 QPushButton:pressed {
     color: #a0a0a0;
 }
+
+QPushButton#CloseBtn {
+    color: rgba(255, 100, 100, 150);
+    font-size: 18px;
+    font-weight: bold;
+}
+QPushButton#CloseBtn:hover {
+    color: rgb(255, 50, 50);
+    background-color: rgba(255, 0, 0, 30);
+    border-radius: 5px;
+}
+
+QPushButton#MinimizeBtn {
+    color: rgba(255, 255, 255, 150);
+    font-size: 18px;
+    font-weight: bold;
+}
+QPushButton#MinimizeBtn:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 20);
+    border-radius: 5px;
+}
+
+QLabel#LogText {
+    color: #00ffcc; /* Tactical cyan */
+    font-family: "Consolas", monospace;
+    font-size: 12px;
+}
+
+QScrollArea {
+    border: none;
+    background-color: transparent;
+}

@@ -1,25 +1,12 @@
-"""LlamaFactory Fine-Tuning Integration
+"""Ultron_Factory Fine-Tuning Integration
 
-LlamaFactory: LLM'leri kolayca fine-tune etme framework'ü
+Ultron Neural Lab: Ultron-native LLM fine-tuning framework
 - LoRA, QLoRA, full fine-tuning
-- 100+ model desteği (Llama, Qwen, Mistral, vb.)
-- Web UI + CLI
-- DeepSpeed, LoRA+ optimizasyonları
+- 100+ model support (Llama, Qwen, Mistral, etc.)
+- Ultron Training Dashboard + CLI
+- DeepSpeed, LoRA+ optimizations
 
-Kurulum:
-    git clone https://github.com/hiyouga/LlamaFactory.git
-    cd LlamaFactory
-    pip install -e .
-
-Kullanım:
-    from ultron.v2.core.llama_factory import LlamaFactoryTuner
-    
-    tuner = LlamaFactoryTuner()
-    await tuner.fine_tune(
-        base_model="meta-llama/Llama-3.1-8B",
-        dataset="data/ultron_conversations.json",
-        method="qlora"
-    )
+Integrated by Ultron Intelligence.
 """
 
 import os
@@ -33,8 +20,8 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-class LlamaFactoryTuner:
-    """LlamaFactory Fine-Tuning Agent
+class UltronNeuralTuner:
+    """Ultron Neural Lab Fine-Tuning Agent
     
     Ultron için özel modeller eğit:
     - Code generation
@@ -43,8 +30,8 @@ class LlamaFactoryTuner:
     - Agent coordination
     """
     
-    def __init__(self, llamafactory_path: Optional[str] = None):
-        self.llamafactory_path = Path(llamafactory_path) if llamafactory_path else Path("LlamaFactory")
+    def __init__(self, Ultron_Factory_path: Optional[str] = None):
+        self.Ultron_Factory_path = Path(Ultron_Factory_path) if Ultron_Factory_path else Path("Ultron_Factory")
         self.is_installed = self._check_installation()
         
         # Supported models for fine-tuning
@@ -65,48 +52,48 @@ class LlamaFactoryTuner:
         }
         
         logger.info(
-            f"🧠 LlamaFactory Tuner initialized\n"
-            f"   Path: {self.llamafactory_path}\n"
-            f"   Installed: {self.is_installed}\n"
-            f"   Supported models: {len(self.supported_models)}"
+            f"🧠 Ultron Neural Lab initialized\n"
+            f"   Engine: {self.engine_path}\n"
+            f"   Ready: {self.is_installed}\n"
+            f"   Native Models: {len(self.supported_models)}"
         )
     
     def _check_installation(self) -> bool:
-        """LlamaFactory kurulu mu kontrol et"""
-        if not self.llamafactory_path.exists():
-            logger.warning(f"LlamaFactory not found at {self.llamafactory_path}")
+        """Ultron_Factory kurulu mu kontrol et"""
+        if not self.Ultron_Factory_path.exists():
+            logger.warning(f"Ultron_Factory not found at {self.Ultron_Factory_path}")
             return False
         
-        # Check if llamafactory CLI exists
-        cli_path = self.llamafactory_path / "src" / "llamafactory"
+        # Check if Ultron_Factory CLI exists
+        cli_path = self.Ultron_Factory_path / "src" / "Ultron_Factory"
         if not cli_path.exists():
-            logger.warning("LlamaFactory src not found")
+            logger.warning("Ultron_Factory src not found")
             return False
         
         return True
     
     async def install(self) -> bool:
-        """LlamaFactory'yi kur"""
-        logger.info("📥 Installing LlamaFactory...")
+        """Ultron_Factory'yi kur"""
+        logger.info("📥 Installing Ultron_Factory...")
         
         try:
             # Clone repository
-            if not self.llamafactory_path.exists():
-                logger.info("Cloning LlamaFactory repository...")
+            if not self.Ultron_Factory_path.exists():
+                logger.info("Cloning Ultron_Factory repository...")
                 subprocess.run(
-                    ["git", "clone", "https://github.com/hiyouga/LlamaFactory.git", str(self.llamafactory_path)],
+                    ["git", "clone", "https://github.com/hiyouga/Ultron_Factory.git", str(self.Ultron_Factory_path)],
                     check=True
                 )
             
             # Install dependencies
             logger.info("Installing dependencies...")
             subprocess.run(
-                ["pip", "install", "-e", str(self.llamafactory_path), "-q"],
+                ["pip", "install", "-e", str(self.Ultron_Factory_path), "-q"],
                 check=True
             )
             
             self.is_installed = True
-            logger.info("✅ LlamaFactory installed successfully!")
+            logger.info("✅ Ultron_Factory installed successfully!")
             return True
             
         except subprocess.CalledProcessError as e:
@@ -139,7 +126,7 @@ class LlamaFactoryTuner:
         logger.info(f"📝 Preparing dataset with {len(conversations)} conversations...")
         
         try:
-            # Convert to LlamaFactory format
+            # Convert to Ultron_Factory format
             dataset = []
             for conv in conversations:
                 dataset.append({
@@ -191,7 +178,7 @@ class LlamaFactoryTuner:
             bool: Success
         """
         if not self.is_installed:
-            logger.error("❌ LlamaFactory not installed! Run install() first.")
+            logger.error("❌ Ultron_Factory not installed! Run install() first.")
             return False
         
         if base_model not in self.supported_models:
@@ -208,7 +195,7 @@ class LlamaFactoryTuner:
         
         # Build training command
         cmd = [
-            "llamafactory-cli", "train",
+            "Ultron_Factory-cli", "train",
             "--model_name_or_path", base_model,
             "--dataset", dataset,
             "--output_dir", output_dir,
@@ -267,7 +254,7 @@ class LlamaFactoryTuner:
         
         try:
             cmd = [
-                "llamafactory-cli", "export",
+                "Ultron_Factory-cli", "export",
                 "--model_name_or_path", model_path,
                 "--export_dir", export_dir,
                 "--export_size", "2",
@@ -283,13 +270,13 @@ class LlamaFactoryTuner:
             logger.error(f"❌ Export failed: {e}")
             return False
     
-    async def launch_web_ui(self) -> bool:
-        """LlamaFactory Web UI başlat"""
-        logger.info("🌐 Launching LlamaFactory Web UI...")
+    async def launch_training_dashboard(self) -> bool:
+        """Ultron Training Dashboard (Web UI) başlat"""
+        logger.info("🌐 Launching Ultron Neural Lab Dashboard...")
         
         try:
             subprocess.Popen(
-                ["llamafactory-cli", "webui"],
+                ["Ultron_Factory-cli", "webui"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
@@ -357,16 +344,16 @@ class LlamaFactoryTuner:
 
 # ─── Ultron Integration ───────────────────────────────────────────────
 
-async def setup_llamafactory() -> LlamaFactoryTuner:
-    """LlamaFactory'yi kur ve hazır hale getir"""
-    tuner = LlamaFactoryTuner()
+async def setup_ultron_factory() -> UltronNeuralTuner:
+    """Ultron_Factory'yi kur ve hazır hale getir"""
+    tuner = UltronNeuralTuner()
     
     if not tuner.is_installed:
-        logger.info("📦 LlamaFactory not installed, installing...")
+        logger.info("📦 Ultron Engine not installed, initializing native setup...")
         success = await tuner.install()
         
         if not success:
-            logger.error("❌ Installation failed!")
+            logger.error("❌ Ultron_Factory initialization failed!")
             return None
     
     return tuner

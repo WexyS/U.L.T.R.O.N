@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 class ClonerAgent(Agent):
-    \"\"\"Specialized agent for cloning websites (UI/UX extraction and reconstruction).
+    """Specialized agent for cloning websites (UI/UX extraction and reconstruction).
 
     Workflow:
     1. Visual Analysis (via Researcher)
     2. Architecture Mapping
     3. Component Generation (React/Tailwind or HTML/CSS)
     4. Backend Mocking/Integration
-    \"\"\"
+    """
 
     def __init__(
         self,
@@ -67,7 +67,7 @@ class ClonerAgent(Agent):
         self.event_bus.subscribe("clone_request", on_clone_request)
 
     async def execute(self, task: Task) -> TaskResult:
-        \"\"\"Execute a site cloning task.\"\"\"
+        """Execute a site cloning task."""
         self.state.status = AgentStatus.BUSY
         self.state.current_task = task.id
 
@@ -191,3 +191,4 @@ class ClonerAgent(Agent):
         )
         response = await self._llm_chat(messages, temperature=0.1)
         return response.content
+

@@ -1,4 +1,4 @@
-"""LlamaFactory Fine-Tuning API Routes
+"""Ultron Neural Lab Fine-Tuning API Routes
 
 Endpoints for managing fine-tuning jobs:
 - GET /api/v2/training/status - Get training status
@@ -84,14 +84,14 @@ async def start_training(request: TrainingStartRequest):
     if active_process:
         raise HTTPException(status_code=400, detail="Training already in progress")
 
-    # Pre-flight check: verify llamafactory-cli is available
+    # Pre-flight check: verify Ultron Neural Lab-cli is available
     import shutil
-    if not shutil.which("llamafactory-cli"):
+    if not shutil.which("Ultron Neural Lab-cli"):
         raise HTTPException(
             status_code=400,
             detail=(
-                "llamafactory-cli not found on PATH. "
-                "Install with: pip install llamafactory "
+                "Ultron Neural Lab-cli not found on PATH. "
+                "Install with: pip install Ultron Neural Lab "
                 "or follow: https://github.com/hiyouga/LLaMA-Factory"
             )
         )
@@ -122,7 +122,7 @@ async def start_training(request: TrainingStartRequest):
 
     # Build training command
     cmd = [
-        "llamafactory-cli", "train",
+        "Ultron Neural Lab-cli", "train",
         "--model_name_or_path", request.base_model,
         "--dataset", request.dataset,
         "--output_dir", request.output_dir,
@@ -227,7 +227,7 @@ async def export_model(request: TrainingExportRequest):
     """Export trained model"""
     try:
         cmd = [
-            "llamafactory-cli", "export",
+            "Ultron Neural Lab-cli", "export",
             "--model_name_or_path", request.model_path,
             "--export_dir", request.export_dir,
             "--export_size", "2",

@@ -77,31 +77,29 @@ export default function InputBox({ onSend, disabled, isConnected }: InputBoxProp
   };
 
   return (
-    <div className="border-t border-ultron-border bg-ultron-panel p-4 backdrop-blur-sm">
+    <div className="bg-white dark:bg-[#1E1E1E] p-8 rounded-[3rem] mx-auto max-w-5xl relative shadow-2xl border border-zinc-200 dark:border-zinc-800/50 transform transition-all focus-within:scale-[1.01]">
       {/* Mode selector */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-4">
         {MODES.map((m) => (
           <button
             key={m.key}
             onClick={() => setMode(m.key)}
             disabled={!isConnected}
-            title={`${m.label} moduna geç`}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
               mode === m.key
-                ? 'text-white shadow-lg'
-                : 'bg-ultron-bg border border-ultron-border text-ultron-textMuted hover:text-white hover:border-ultron-primary/50'
+                ? 'text-white shadow-md'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'
             }`}
             style={
               mode === m.key
                 ? {
                     backgroundColor: resolveModeColor(m.color),
-                    boxShadow: `0 8px 20px ${resolveModeColor(m.color)}33`,
                   }
                 : undefined
             }
           >
             {m.icon}
-            {m.label}
+            <span className="uppercase tracking-wider">{m.label}</span>
           </button>
         ))}
 
@@ -118,38 +116,39 @@ export default function InputBox({ onSend, disabled, isConnected }: InputBoxProp
       </div>
 
       {/* Input form */}
-      <form onSubmit={handleSubmit} className="flex gap-3">
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            mode === 'chat' ? "Bana istediğini sor..." :
-            mode === 'code' ? "Yazmamı istediğin kodu tarif et..." :
-            mode === 'research' ? "Neyi araştırmamı istersin?" :
-            "Bilgisayarda hangi işlemi yapmamı istersin?"
-          }
-          disabled={!isConnected || disabled}
-          rows={1}
-          className="flex-1 bg-ultron-bg border border-ultron-border rounded-xl px-4 py-3 text-ultron-text placeholder-ultron-textMuted/50 resize-none focus:outline-none focus:border-ultron-primary/50 focus:ring-1 focus:ring-ultron-primary/20 transition-all disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim() || !isConnected || disabled}
-          title="Mesajı gönder"
-          className="px-6 py-3 bg-ultron-primary hover:bg-ultron-primary/80 disabled:bg-ultron-border disabled:text-ultron-textMuted/50 text-white font-medium rounded-xl transition-all disabled:cursor-not-allowed shadow-lg shadow-ultron-primary/20"
-        >
-          <Send className="w-5 h-5" />
-        </button>
-      </form>
+      <div className="relative group">
+        <form onSubmit={handleSubmit} className="flex gap-4 items-end">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              mode === 'chat' ? "Nasıl yardımcı olabilirim?" :
+              mode === 'code' ? "Yazmamı istediğin kodu tarif et..." :
+              mode === 'research' ? "Neyi araştırmamı istersin?" :
+              "Bilgisayarda hangi işlemi yapmamı istersin?"
+            }
+            disabled={!isConnected || disabled}
+            rows={1}
+            className="flex-1 bg-transparent border-none px-4 py-4 text-xl text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 resize-none focus:outline-none focus:ring-0 transition-all disabled:opacity-50 min-h-[60px]"
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || !isConnected || disabled}
+            className="p-4 bg-purple-600 hover:bg-purple-700 disabled:bg-zinc-200 dark:disabled:bg-zinc-800 text-white rounded-2xl transition-all active:scale-90 flex items-center justify-center shadow-lg shadow-purple-500/20"
+          >
+            <Send className="w-6 h-6" />
+          </button>
+        </form>
+      </div>
 
       {/* Status text */}
-      <div className="mt-2 text-xs text-ultron-textMuted/50 text-center">
+      <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600 text-center">
         {isConnected ? (
-          disabled ? 'İşleniyor...' : `Göndermek için Enter, yeni satır için Shift+Enter`
+          disabled ? 'İşleniyor...' : `Enter ile gönder • Shift+Enter ile alt satır`
         ) : (
-          <span className="text-ultron-danger">Bağlantı yok — backend bekleniyor...</span>
+          <span className="text-red-500">Bağlantı kesildi — Ultron Core bekleniyor...</span>
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_URL, WS_URL } from '../config';
 
 export interface ChatMessage {
   id?: string;
@@ -11,6 +12,16 @@ export interface StreamChunk {
   type: 'started' | 'token' | 'complete' | 'error' | 'tool_call' | 'thought';
   content: string;
   metadata: Record<string, any>;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+  model: string;
+  mode: string;
 }
 
 interface ProviderEntry {
@@ -79,8 +90,6 @@ interface UseUltronOptions {
   maxReconnectAttempts?: number;
 }
 
-import { API_URL, WS_URL } from '../config';
-
 export function useUltron({
   wsUrl = WS_URL,
   apiUrl = API_URL,
@@ -88,6 +97,8 @@ export function useUltron({
   maxReconnectAttempts = 10
 }: UseUltronOptions = {}) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentResponse, setCurrentResponse] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -100,6 +111,43 @@ export function useUltron({
   const reconnectAttempts = useRef(0);
   const reconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const responseBuffer = useRef('');
+
+  // Load conversations
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/conversations`);
+        if (res.ok) {
+          const data = await res.json();
+          setConversations(data.conversations || []);
+          if (data.conversations?.length > 0 && !activeConversationId) {
+            // Don't auto-select if we already have one
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch conversations:', err);
+      }
+    };
+    fetchConversations();
+  }, [apiUrl, activeConversationId]);
+
+  const loadConversationMessages = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${apiUrl}/api/conversations/${id}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        const msgs = data.messages || [];
+        setMessages(msgs.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp || Date.now()
+        })));
+        setActiveConversationId(id);
+      }
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+    }
+  }, [apiUrl]);
 
   // Poll system status
   useEffect(() => {
@@ -128,7 +176,7 @@ export function useUltron({
         wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     try {
-      // Pre-flight: check if backend is reachable before opening WebSocket
+      // Pre-flight: check if backend is reachable
       try {
         const healthRes = await fetch(`${apiUrl}/health`, { signal: AbortSignal.timeout(3000) });
         if (!healthRes.ok) {
@@ -174,26 +222,23 @@ export function useUltron({
 
         if (reconnectAttempts.current < maxReconnectAttempts) {
           const delay = Math.min(reconnectInterval * Math.pow(1.5, reconnectAttempts.current), 30000);
-          console.log(`[Ultron] Reconnecting in ${delay}ms... (${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
           reconnectTimeout.current = setTimeout(() => {
             reconnectAttempts.current++;
             connect();
           }, delay);
         } else {
           setError('Connection lost. Please ensure the backend is running on port 8000.');
-          console.error('[Ultron] Max reconnection attempts reached');
         }
       };
 
       ws.onerror = (event) => {
         console.error('[Ultron] WebSocket error:', event);
-        setError('WebSocket connection failed. Is the backend running on http://localhost:8000?');
+        setError('WebSocket connection failed.');
       };
 
       ws.onmessage = (event) => {
         try {
           const data: StreamChunk = JSON.parse(event.data);
-
           switch (data.type) {
             case 'started':
               responseBuffer.current = '';
@@ -206,7 +251,6 @@ export function useUltron({
               break;
             case 'complete':
               setIsStreaming(false);
-              // Use buffer first, then data.content, then fallback
               const finalContent = responseBuffer.current || data.content || 'No response received.';
               setMessages(prev => [...prev, {
                 role: 'assistant',
@@ -231,7 +275,7 @@ export function useUltron({
       console.error('[Ultron] Connection failed:', err);
       setError('Failed to connect to Ultron backend');
     }
-  }, [wsUrl, maxReconnectAttempts, reconnectInterval]);
+  }, [wsUrl, maxReconnectAttempts, reconnectInterval, apiUrl]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeout.current) {
@@ -245,7 +289,7 @@ export function useUltron({
     setIsConnected(false);
   }, []);
 
-  const sendMessage = useCallback((text: string, mode: 'chat' | 'code' | 'research' | 'rpa' = 'chat', conversationId?: string) => {
+  const sendMessage = useCallback((text: string, mode: 'chat' | 'code' | 'research' | 'rpa' = 'chat') => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setError('Not connected to backend');
       return;
@@ -262,10 +306,10 @@ export function useUltron({
       message: text,
       mode,
       stream: true,
-      conversation_id: conversationId,
-      history: messages.slice(-10) // Send last 10 messages for context
+      conversation_id: activeConversationId,
+      history: messages.slice(-10)
     }));
-  }, [messages]);
+  }, [messages, activeConversationId]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -282,6 +326,8 @@ export function useUltron({
 
   return {
     messages,
+    conversations,
+    activeConversationId,
     isStreaming,
     currentResponse,
     isConnected,
@@ -292,6 +338,9 @@ export function useUltron({
     sendMessage,
     clearMessages,
     setMessages,
+    setActiveConversationId,
+    setConversations,
+    loadConversationMessages,
     connect,
     disconnect
   };

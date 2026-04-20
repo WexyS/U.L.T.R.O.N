@@ -25,10 +25,12 @@ from ultron.v2.agents.clipboard_agent import ClipboardAgent
 from ultron.v2.agents.meeting_agent import MeetingAgent
 from ultron.v2.agents.files_agent import FilesAgent
 from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
-from ultron.v2.agents.openguider_bridge import OpenGuiderBridgeAgent
+from ultron.v2.agents.vision_agent import UltronVisionAgent
+from ultron.v2.agents.architect import AgentArchitect
 from ultron.v2.agents.debate_agent import DebateAgent
 from ultron.v2.agents.cloner import ClonerAgent
 from ultron.v2.agents.whatsapp_agent import WhatsAppAgent
+from ultron.v2.agents.gaming_agent import GamingAgent
 
 # ── AGI Core Modules ──────────────────────────────────────
 from ultron.v2.core.reasoning_engine import ReasoningEngine
@@ -38,6 +40,8 @@ from ultron.v2.core.self_improvement import SelfImprovementEngine
 from ultron.v2.mcp.bridge import MCPBridge
 from ultron.v2.mcp.lifecycle import MCPClusterManager
 from ultron.v2.mcp.loader import load_mcp_settings
+from ultron.v2.core.nexus import UltronNexus
+from ultron.v2.core.knowledge import LocalKnowledgeEngine
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +101,10 @@ INTENT_KEYWORDS = {
                   "code review bu kodu"],
     "debate": ["tartış", "fikir bul", "en iyisini bul", "debate", "karşılaştır"],
     "clone": ["clone", "klonla", "site kopyala", "web sitesi", "website", "arayüz", "ui"],
+    "architect": ["mimar", "architect", "ajan oluştur", "create agent", "skill yaz", "yeni uzman", "indeksle", "index library", "proje oluştur", "uygulama yap", "site yap", "oyun yap", "mobil uygulama", "build project", "create app"],
     "whatsapp": ["whatsapp", "mesaj gönder", "wp", "yaz", "send message", "mesaj at"],
-    "architect": ["proje oluştur", "uygulama yap", "site yap", "oyun yap", "mobil uygulama", "build project", "create app"],
-    "discover": ["skill bul", "yetenek ekle", "install skill", "clawhub", "mcp server bul", "yeni araç ekle"],
+    "gaming": ["lol", "league of legends", "tft", "teamfight tactics", "comp", "taktik", "oyun taktik", "meta", "tier", "build"],
+    "discover": ["skill bul", "yetenek ekle", "install skill", "nexus", "mcp server bul", "yeni araç ekle"],
 }
 
 
@@ -139,7 +144,9 @@ class Orchestrator:
 
         # Initialize agents
         self.agents: dict[AgentRole, Any] = {}
+        self.knowledge = LocalKnowledgeEngine(self.memory)
         self._init_agents(work_dir)
+        self._load_custom_agents(work_dir)
 
         # Discover skills and agents
         self._skills = _discover_skills()
@@ -169,15 +176,14 @@ class Orchestrator:
 
         self.hermes_tools: list = []  # Populated dynamically per session
 
+        # ── MCP & Skill Management ──────────────────────────────────
         self._work_dir = work_dir
         project_root = Path(__file__).resolve().parent.parent.parent.parent
         config_path = project_root / "config" / "mcp.yaml"
         _mcp_cfg = load_mcp_settings(workspace_dir=work_dir, config_path=config_path)
         self.mcp_manager = MCPClusterManager(_mcp_cfg, config_path=config_path)
         self.mcp_bridge = MCPBridge(self.mcp_manager, security=self.security)
-        
-        from ultron.v2.core.skill_discovery import SkillDiscovery
-        self.discovery = SkillDiscovery(self.mcp_manager)
+        self.nexus = UltronNexus(self.mcp_manager)
 
     def _should_auto_use_mcp_in_chat(self, user_input: str) -> bool:
         """Heuristic gate for MCP tool injection during normal chat."""
@@ -239,6 +245,16 @@ class Orchestrator:
             logger.warning("Failed to initialize EmailAgent: %s", e)
 
         try:
+            self.agents[AgentRole.ARCHITECT] = AgentArchitect(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+                knowledge_engine=self.knowledge
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize AgentArchitect: %s", e)
+
+        try:
             self.agents[AgentRole.SYSMON] = SystemMonitorAgent(
                 llm_router=self.llm_router,
                 event_bus=self.event_bus,
@@ -264,6 +280,27 @@ class Orchestrator:
             )
         except Exception as e:
             logger.warning("Failed to initialize ClonerAgent: %s", e)
+
+        try:
+            self.agents[AgentRole.GAMING] = GamingAgent(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize GamingAgent: %s", e)
+
+    def _load_custom_agents(self, work_dir: str) -> None:
+        """Dynamically load custom agents from workspace/agents."""
+        custom_agents_dir = Path(work_dir) / "agents"
+        if not custom_agents_dir.exists():
+            return
+
+        for item in custom_agents_dir.iterdir():
+            if item.is_dir() and (item / "agent.json").exists():
+                logger.info(f"Detected custom agent: {item.name}")
+                # Logic for dynamic loading of custom agent classes would go here
+                # For now, we register them as discoverable skills
 
         try:
             self.agents[AgentRole.MEETING] = MeetingAgent(
@@ -292,13 +329,13 @@ class Orchestrator:
             self.error_analyzer = None
 
         try:
-            self.agents[AgentRole.OPENGUIDER_BRIDGE] = OpenGuiderBridgeAgent(
+            self.agents[AgentRole.VISION] = UltronVisionAgent(
                 llm_router=self.llm_router,
                 event_bus=self.event_bus,
                 blackboard=self.blackboard,
             )
         except Exception as e:
-            logger.warning("Failed to initialize OpenGuiderBridgeAgent: %s", e)
+            logger.warning("Failed to initialize UltronVisionAgent: %s", e)
 
         try:
             self.agents[AgentRole.DEBATE] = DebateAgent(
@@ -324,8 +361,13 @@ class Orchestrator:
         """Start the orchestrator and all agents."""
         self._running = True
         for role, agent in self.agents.items():
-            await agent.start()
-            logger.info("Agent started: %s", role.value)
+            try:
+                await agent.start()
+                role_name = role.value if hasattr(role, 'value') else str(role)
+                logger.info("Agent started: %s", role_name)
+            except Exception as e:
+                role_name = role.value if hasattr(role, 'value') else str(role)
+                logger.warning("Agent failed to start (non-fatal): %s — %s", role_name, e)
 
         try:
             await self.mcp_manager.start()
@@ -334,8 +376,11 @@ class Orchestrator:
             logger.warning("MCP başlatma / katalog: %s", e)
 
         # Log memory stats
-        stats = self.memory.stats()
-        logger.info("Memory engine: %s", stats)
+        try:
+            stats = self.memory.stats()
+            logger.info("Memory engine: %s", stats)
+        except Exception as e:
+            logger.warning("Memory stats failed (non-fatal): %s", e)
 
     async def stop(self) -> None:
         """Stop all agents and clean up resources."""
@@ -348,7 +393,8 @@ class Orchestrator:
             try:
                 await agent.stop()
             except Exception as e:
-                logger.warning("Error stopping agent %s: %s", role.value, e)
+                role_name = role.value if hasattr(role, "value") else str(role)
+                logger.warning("Error stopping agent %s: %s", role_name, e)
         # Close event bus
         if self.event_bus:
             self.event_bus._handlers.clear()
@@ -433,6 +479,9 @@ class Orchestrator:
         if intent.get("type") == "code":
             result = await self._execute_code_task(user_input, intent, lesson_context)
             agent_name = "coder"
+        elif intent.get("type") == "architect":
+            result = await self._execute_architect_task(user_input, intent, lesson_context)
+            agent_name = "architect"
         elif intent.get("type") == "research":
             result = await self._execute_research_task(user_input, intent, lesson_context)
             agent_name = "researcher"
@@ -487,6 +536,9 @@ class Orchestrator:
         elif intent.get("type") == "discover":
             result = await self._execute_discovery_task(user_input, intent, lesson_context)
             agent_name = "discovery"
+        elif intent.get("type") == "gaming":
+            result = await self._execute_gaming_task(user_input, intent, lesson_context)
+            agent_name = "gaming"
         else:
             # General chat
             history = context.get("history", []) if context else []
@@ -508,7 +560,7 @@ class Orchestrator:
         try:
             self.memory.store(
                 entry_id=f"interaction_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                content=f"User: {user_input}\nResponse: {result[:500]}",
+                content=f"User: {user_input}\nResponse: {str(result)[:500]}",
                 entry_type="episodic",
                 metadata={"intent": intent.get("type")},
             )
@@ -744,6 +796,39 @@ class Orchestrator:
             logger.exception("MCP sohbet akışı")
             return f"MCP / LLM araç döngüsü hatası: {e}"
 
+    async def _execute_architect_task(
+        self,
+        user_input: str,
+        intent: dict,
+        lesson_context: str,
+    ) -> str:
+        """Execute via AgentArchitect for agent creation and library indexing."""
+        agent = self.agents["architect"]
+        # Look for directory paths in the input for indexing
+        path_match = re.search(r'([A-Za-z]:\\[^ ]+|/[^ ]+)', user_input)
+        path = path_match.group(0) if path_match else None
+        
+        task = Task(
+            description=user_input,
+            intent="architect",
+            context={"lesson_context": lesson_context}
+        )
+        res = await agent.execute(task)
+        return res.output
+
+    async def _execute_gaming_task(
+        self,
+        user_input: str,
+        intent: dict,
+        lesson_context: str,
+    ) -> str:
+        agent = self.agents.get(AgentRole.GAMING)
+        if not agent:
+            return "Oyun Asistanı şu an aktif değil."
+        task = Task(description=user_input, intent="gaming")
+        res = await agent.execute(task)
+        return res.output
+
     async def _execute_code_task(
         self,
         user_input: str,
@@ -952,33 +1037,33 @@ class Orchestrator:
         return await self._execute_autonomous_task(user_input, {"type": "autonomous", "context": context}, lesson_context)
 
     async def _execute_discovery_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
-        """Search and install new skills from ClawHub/GitHub."""
+        """Search and install new skills from Ultron Nexus (ClawHub/GitHub)."""
         query = user_input.replace("skill bul", "").replace("yetenek ekle", "").replace("install skill", "").strip()
         if not query:
             return "Lütfen ne tür bir yetenek aradığınızı belirtin (örn: 'spotify skill bul')."
 
-        await self.event_bus.publish("notification", {"message": f"🔍 '{query}' için ClawHub ve GitHub taranıyor..."})
+        await self.event_bus.publish("notification", {"message": f"🔍 '{query}' için Ultron Nexus taranıyor..."})
         
         # 1. Search
-        claw_results = await self.discovery.search_clawhub(query)
-        gh_results = await self.discovery.search_github(query)
-        all_results = claw_results + gh_results
+        nexus_results = await self.nexus.search_ultron_skill_nexus(query)
+        gh_results = await self.nexus.search_github(query)
+        all_results = nexus_results + gh_results
         
         if not all_results:
-            return f"Üzgünüm, '{query}' ile ilgili uygun bir MCP sunucusu veya yetenek bulunamadı."
+            return f"Üzgünüm, '{query}' ile ilgili uygun bir yetenek bulunamadı."
 
-        # 2. Pick best (simulated - in real case, we might ask the user)
+        # 2. Pick best
         best = all_results[0]
         
         # 3. Install
-        success = await self.discovery.auto_install_server(best)
+        success = await self.nexus.auto_install_server(best)
         
         if success:
             # Refresh bridge tools
             await self.mcp_bridge.refresh_tool_catalog()
-            return f"✅ Yeni yetenek başarıyla eklendi: **{best['name']}** ({best['source']})\nArtık '{query}' ile ilgili istekleri yerine getirebilirim! 🚀"
+            return f"✅ Yeni yetenek Ultron ekosistemine eklendi: **{best['name']}**\nArtık '{query}' ile ilgili istekleri yerine getirebilirim! 🚀"
         else:
-            return f"❌ '{best['name']}' yeteneği bulundu ama otomatik kurulum başarısız oldu. Manuel kurulum gerekebilir: {best['url']}"
+            return f"❌ '{best['name']}' yeteneği bulundu ancak Ultron Nexus kurulumu başarısız oldu."
 
     async def _execute_file_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
         """Read, write, or list files."""
@@ -1306,6 +1391,19 @@ class Orchestrator:
         except Exception as e:
             logger.debug("Episodic memory search failed: %s", e)
 
+        # Intelligent Routing: If it's a complex logic/reasoning task, use ReasoningEngine
+        COMPLEX_SIGNALS = ("neden", "niçin", "kanıtla", "analiz", "ispat", "nasıl çalışır", "farkı nedir", "think", "analyze", "prove", "why", "how does", "what is the difference")
+        if any(sig in user_input.lower() for sig in COMPLEX_SIGNALS) or len(user_input.split()) > 15:
+            logger.info("Complex query detected - triggering ReasoningEngine...")
+            # Prepare context (history + memory insights)
+            full_context = {
+                "lesson_context": lesson_context,
+                "memory_parts": "\n\n".join(parts),
+                "history": history if 'history' in locals() else []
+            }
+            reason_res = await self.reasoning.reason(user_input, context=full_context)
+            return reason_res.final_answer
+
         messages = [
             {"role": "system", "content": "\n\n".join(parts)}
         ]
@@ -1354,7 +1452,8 @@ class Orchestrator:
 
         # CRITICAL: Validate response language — reject if contains Chinese characters
         import re
-        if re.search(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]', response.content):
+        content_text = str(response.content or "")
+        if re.search(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]', content_text):
             # Regenerate with stricter language enforcement
             messages[0]["content"] += "\n\nCRITICAL: Your previous response contained non-Turkish characters. " \
                 "Regenerate the ENTIRE response in Turkish ONLY."
@@ -1367,22 +1466,22 @@ class Orchestrator:
         try:
             self.memory.store(
                 entry_id=f"chat_{int(datetime.now().timestamp())}",
-                content=f"User: {user_input}\nUltron: {response.content[:500]}",
+                content=f"User: {user_input}\nUltron: {str(response.content)[:500]}",
                 entry_type="episodic",
                 metadata={"type": "chat"},
             )
         except Exception as e:
             logger.warning("Memory store after chat failed: %s", e)
 
-        return response.content
+        return str(response.content or "Yanıt oluşturulamadı.")
 
     def get_status(self) -> dict:
         """Get system status."""
         return {
             "running": self._running,
             "agents": {
-                role.value: {
-                    "status": agent.state.status.value,
+                (role.value if hasattr(role, 'value') else str(role)): {
+                    "status": (agent.state.status.value if hasattr(agent.state.status, 'value') else str(agent.state.status)),
                     "tasks_completed": agent.state.tasks_completed,
                     "tasks_failed": agent.state.tasks_failed,
                 }

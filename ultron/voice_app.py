@@ -1,4 +1,4 @@
-\"\"\"Ultron Voice App — Standalone voice interaction window.\"\"\"
+"""Ultron Voice App — Standalone voice interaction window."""
 import os
 import sys
 import logging
@@ -35,7 +35,7 @@ def main():
         "Yanıtlarını kısa, öz ve doğal konuşma diliyle ver."
     )
     
-    print(\"\"\"
+    print("""
     ╔════════════════════════════════════════════════════════════╗
     ║                 ULTRON SESLİ ASİSTAN MODU                  ║
     ╠════════════════════════════════════════════════════════════╣
@@ -43,7 +43,7 @@ def main():
     ║  • Çıkmak için Ctrl+C tuşlarına basın.                     ║
     ║  • Kimlik: Ultron sizi tanıyor.                            ║
     ╚════════════════════════════════════════════════════════════╝
-    \"\"\")
+    """)
     
     try:
         pipeline.start()
@@ -60,3 +60,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

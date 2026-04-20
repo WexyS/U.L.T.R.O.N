@@ -112,7 +112,7 @@ export default function ChatArea({
       className="flex-1 overflow-y-auto scroll-smooth"
       style={{ backgroundColor: 'rgb(var(--color-bg))' }}
     >
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-6 py-10 space-y-8">
         {messages.length === 0 && !currentResponse ? (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -120,51 +120,21 @@ export default function ChatArea({
             transition={{ duration: 0.5 }}
             className="flex flex-col items-center justify-center min-h-[60vh] text-center"
           >
-            {/* Enhanced Welcome Screen */}
-            <div className="relative mb-12">
-              <motion.div 
-                className="w-24 h-24 rounded-[2rem] flex items-center justify-center relative z-10"
-                style={{ 
-                  background: 'linear-gradient(135deg, rgb(var(--color-accent)), #6366f1)',
-                  boxShadow: '0 20px 50px -10px rgba(99, 102, 241, 0.4)'
-                }}
-                animate={{ 
-                  borderRadius: ["2rem", "2.5rem", "2rem"],
-                  scale: [1, 1.02, 1]
-                }}
-                transition={{ duration: 6, repeat: Infinity }}
-              >
-                <Bot className="w-12 h-12 text-white" strokeWidth={1.5} />
-              </motion.div>
-              {/* Pulsing glow */}
-              <motion.div
-                className="absolute inset-0 rounded-full bg-indigo-500/20 blur-3xl"
-                animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0.8, 0.5] }}
-                transition={{ duration: 4, repeat: Infinity }}
-              />
-            </div>
-
             <motion.h2 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="text-4xl font-bold mb-3"
-              style={{ 
-                background: 'linear-gradient(135deg, rgb(var(--color-text)), rgb(var(--color-accent)))',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent'
-              }}
+              className="text-6xl font-bold mb-6 font-serif tracking-tight text-zinc-900 dark:text-zinc-100"
             >
-              Ultron v2.1
+              Good afternoon, Eren
             </motion.h2>
             <motion.p 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="max-w-lg text-lg mb-8"
-              style={{ color: 'rgb(var(--color-text-secondary))' }}
+              className="max-w-2xl text-2xl mb-12 text-zinc-500 dark:text-zinc-400 font-medium"
             >
-              Your advanced multi-agent AI assistant. Ask questions, write code, conduct research, and automate tasks.
+              How can I help you today?
             </motion.p>
 
             {/* Capability Cards */}
@@ -228,31 +198,23 @@ export default function ChatArea({
                   <div className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     {/* Assistant Avatar */}
                     {msg.role === 'assistant' && (
-                      <div className="flex-shrink-0">
-                        <div 
-                          className="w-9 h-9 rounded-xl flex items-center justify-center"
-                          style={{ background: 'linear-gradient(135deg, rgb(var(--color-accent)), #4f46e5)' }}
-                        >
-                          <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
+                      <div className="flex-shrink-0 mt-1">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-100 dark:bg-purple-500/20">
+                          <Bot className="w-5 h-5 text-purple-600 dark:text-purple-400" strokeWidth={1.5} />
                         </div>
                       </div>
                     )}
 
                     {/* Message Content */}
-                    <div className={`flex-1 max-w-3xl ${msg.role === 'user' ? 'order-1' : ''}`}>
+                    <div className={`flex-1 max-w-[85%] lg:max-w-3xl ${msg.role === 'user' ? 'order-1' : ''}`}>
                       <div
-                        className={`rounded-2xl px-6 py-4 ${
+                        className={
                           msg.role === 'user'
-                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 ml-12'
-                            : 'bg-transparent text-zinc-800 dark:text-zinc-200'
-                        }`}
-                        style={{
-                          border: msg.role === 'user' ? 'none' : 'none'
-                        }}
+                            ? 'message-bubble-user ml-auto'
+                            : 'message-bubble-assistant'
+                        }
                       >
-                        <div className="prose prose-sm max-w-none" style={{ 
-                          color: msg.role === 'user' ? 'white' : 'rgb(var(--color-text))'
-                        }}>
+                        <div className="prose prose-sm lg:prose-base max-w-none dark:prose-invert">
                           {msg.role === 'user' ? (
                             <p className="whitespace-pre-wrap">{msg.content}</p>
                           ) : (
@@ -347,13 +309,8 @@ export default function ChatArea({
 
                     {/* User Avatar */}
                     {msg.role === 'user' && (
-                      <div className="flex-shrink-0">
-                        <div 
-                          className="w-9 h-9 rounded-xl flex items-center justify-center"
-                          style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
-                        >
-                          <User className="w-5 h-5 text-white" strokeWidth={1.5} />
-                        </div>
+                      <div className="flex-shrink-0 mt-1 hidden">
+                        {/* Hidden to match Claude's cleaner look without user avatars */}
                       </div>
                     )}
                   </div>
@@ -368,23 +325,23 @@ export default function ChatArea({
                 animate={{ opacity: 1, y: 0 }}
                 className="flex gap-4"
               >
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-600 shadow-sm">
-                  <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-purple-100 dark:bg-purple-500/20 mt-1">
+                  <Bot className="w-5 h-5 text-purple-600 dark:text-purple-400" strokeWidth={1.5} />
                 </div>
                 <div className="flex-1 max-w-3xl">
-                  <div className="rounded-2xl px-6 py-4 bg-transparent">
-                    <div className="prose prose-sm max-w-none text-zinc-800 dark:text-zinc-200">
+                  <div className="message-bubble-assistant">
+                    <div className="prose prose-sm lg:prose-base max-w-none dark:prose-invert">
                       <StreamingMessage content={currentResponse} isStreaming={true} />
                     </div>
                   </div>
                   {/* Streaming indicator */}
-                  <div className="flex items-center gap-2 mt-2 px-6 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
+                  <div className="flex items-center gap-2 px-0 text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400">
                     <motion.div
                       animate={{ opacity: [0.3, 1, 0.3] }}
                       transition={{ duration: 1.5, repeat: Infinity }}
-                      className="w-1.5 h-1.5 rounded-full bg-indigo-500"
+                      className="w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400"
                     />
-                    <span>Ultron is generating...</span>
+                    <span>Generating...</span>
                   </div>
                 </div>
               </motion.div>

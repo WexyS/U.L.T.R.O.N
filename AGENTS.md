@@ -10,7 +10,7 @@ It features a FastAPI backend, a React/Vite frontend, and integrates with numero
 
 **Monorepo Structure:**
 - **`Ultron/` (root):** Main project, containing the FastAPI backend (`ultron/`), React frontend (`ultron-desktop/`), and shared configurations/scripts.
-- **`LlamaFactory/`:** A separate Python project for fine-tuning large language models. It has its own build, test, and run commands.
+- **`Ultron Factory/`:** A separate Python project for fine-tuning large language models. It has its own build, test, and run commands.
 - **`superpowers/` & `marketing-skills/`:** These directories contain agent skills and workflows. They are external dependencies or sources of skills for Ultron agents, not core development areas for Ultron itself. *Do not apply their internal `CLAUDE.md` or `AGENTS.md` guidelines to the Ultron project.*
 
 ## Core Development Commands (Ultron Project)
@@ -49,11 +49,11 @@ It features a FastAPI backend, a React/Vite frontend, and integrates with numero
 - **AI Providers:** Configured via `.env`. Smart routing for `fast`, `code`, `long`, `cheap` task types. Ollama is default local LLM.
 - **Configuration:** `.env` for API keys and URLs; `config/agents.yaml` for agent-specific settings.
 
-## LlamaFactory Project Guidelines
+## Ultron Factory Project Guidelines
 
 This is a separate Python project within the monorepo for LLM fine-tuning.
 
-### Commands (from `LlamaFactory/` directory)
+### Commands (from `Ultron Factory/` directory)
 - **Code Style (auto-fix):** `make style`
 - **Code Quality Check:** `make quality`
 - **Run All Tests:** `make test` (Note: most training tests require GPU hardware)
@@ -61,15 +61,15 @@ This is a separate Python project within the monorepo for LLM fine-tuning.
 - **Build Package:** `make build`
 - **Quickstart Training/Inference/Export:**
   ```bash
-  llamafactory-cli train examples/train_lora/qwen3_lora_sft.yaml
-  llamafactory-cli chat examples/inference/qwen3_lora_sft.yaml
-  llamafactory-cli export examples/merge_lora/qwen3_lora_sft.yaml
+  Ultron Factory-cli train examples/train_lora/qwen3_lora_sft.yaml
+  Ultron Factory-cli chat examples/inference/qwen3_lora_sft.yaml
+  Ultron Factory-cli export examples/merge_lora/qwen3_lora_sft.yaml
   ```
-- **Launch Web UI:** `llamafactory-cli webui`
+- **Launch Web UI:** `Ultron Factory-cli webui`
 
-### Architecture (LlamaFactory)
-- **Versions:** `v0` (default) and `v1` (experimental, in `src/llamafactory/v1/`). Most development is in `v0`.
-- **CLI Entry:** `llamafactory-cli` or `lmf` (`src/llamafactory/cli.py:main()`).
+### Architecture (Ultron Factory)
+- **Versions:** `v0` (default) and `v1` (experimental, in `src/Ultron Factory/v1/`). Most development is in `v0`.
+- **CLI Entry:** `Ultron Factory-cli` or `lmf` (`src/Ultron Factory/cli.py:main()`).
 - **Configuration:** All training parameters are set via YAML/JSON config files.
 - **Code Style:** Uses Ruff (line length 119, Google-style docstrings), Python 3.11+, double quotes, Apache 2.0 license headers.
 - **Testing:** `WANDB_DISABLED=true` should always be set when running tests.
@@ -77,6 +77,6 @@ This is a separate Python project within the monorepo for LLM fine-tuning.
 ## General Agent Guidelines for this Repository
 
 - **File Paths:** Always use absolute paths for file operations (`read`, `write`, `edit`).
-- **External Skill Repos:** The `superpowers/` and `marketing-skills/` directories are external skill providers. Do not apply their internal guidelines (e.g., `CLAUDE.md`, `AGENTS.md`) when working on the *Ultron* or *LlamaFactory* projects within this repository.
+- **External Skill Repos:** The `superpowers/` and `marketing-skills/` directories are external skill providers. Do not apply their internal guidelines (e.g., `CLAUDE.md`, `AGENTS.md`) when working on the *Ultron* or *Ultron Factory* projects within this repository.
 - **Environment Variables:** Use `.env` file (copy `.env.example`) to configure API keys, URLs, and other settings.
 - **Python Virtual Environment:** Always activate `.venv` before running Python commands.

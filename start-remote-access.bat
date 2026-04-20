@@ -13,10 +13,11 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo [2] Ultron Backend (8000) dış dünyaya açılıyor...
-echo Arkadaşlarına göndereceğin link birazdan aşağıda belirecek.
+echo [2] Ultron Dashboard (5174) dış dünyaya açılıyor...
+echo Telefonundan gireceğin link birazdan aşağıda belirecek.
 echo.
-echo IP adresi ve port forwarding ile uğraşmana gerek kalmadı! 😉
+echo NOT: Vite HTTPS kullandığı için ngrok linkine girdiğinde
+echo bir güvenlik uyarısı alırsan "Gelişmiş -> Devam Et" diyebilirsin. 😉
 echo.
-ngrok http 8000
+ngrok http https://localhost:5174
 pause

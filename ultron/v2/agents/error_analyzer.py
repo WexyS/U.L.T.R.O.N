@@ -30,6 +30,7 @@ from ultron.v2.core.types import Task, TaskResult, TaskStatus
 from ultron.v2.core.event_bus import EventBus
 from ultron.v2.core.blackboard import Blackboard
 from ultron.v2.core.llm_router import LLMRouter
+from ultron.v2.core.error_analyzer import ErrorAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -151,48 +152,21 @@ class ErrorAnalyzerAgent:
             return self._basic_analyze(error_log)
 
     def _basic_analyze(self, error_log: str) -> ErrorAnalysis:
-        """Basic error analysis without AI."""
-        error_type = "unknown"
-        severity = "medium"
+        """Basic error analysis using core ErrorAnalyzer."""
+        analysis = ErrorAnalyzer.analyze(error_log)
         
-        # Detect common error types
-        if "ImportError" in error_log or "ModuleNotFoundError" in error_log:
-            error_type = "import_error"
-            severity = "high"
-        elif "ConnectionError" in error_log or "Connection refused" in error_log:
-            error_type = "connection_error"
-            severity = "high"
-        elif "TimeoutError" in error_log or "timeout" in error_log.lower():
-            error_type = "timeout_error"
-            severity = "medium"
-        elif "SyntaxError" in error_log or "IndentationError" in error_log:
-            error_type = "syntax_error"
-            severity = "high"
-        elif "TypeError" in error_log:
-            error_type = "type_error"
-            severity = "medium"
-        elif "ValueError" in error_log:
-            error_type = "value_error"
-            severity = "medium"
-        elif "FileNotFoundError" in error_log:
-            error_type = "file_not_found"
-            severity = "medium"
-        elif "CUDA" in error_log or "cuda" in error_log.lower():
-            error_type = "cuda_error"
-            severity = "critical"
-        
-        # Extract file names
+        # Map to structured ErrorAnalysis
         affected_files = re.findall(r'File "([^"]+\.py)"', error_log)
         
         return ErrorAnalysis(
-            error_type=error_type,
+            error_type=analysis["error_type"],
             error_message=error_log[:200],
-            root_cause=f"Detected {error_type} from error log",
-            severity=severity,
+            root_cause=analysis["explanation"],
+            severity="high" if analysis["can_self_heal"] else "medium",
             affected_files=list(set(affected_files)),
-            fix_suggestion=f"Review and fix the {error_type} in the affected files",
+            fix_suggestion=analysis["suggested_fix"] or "Manual review required",
             confidence=0.6,
-            preventive_measures=["Add proper error handling", "Write tests for this scenario"]
+            preventive_measures=["Add proper error handling", "Verify system consistency"]
         )
 
     def _parse_json_response(self, response: str) -> Dict:

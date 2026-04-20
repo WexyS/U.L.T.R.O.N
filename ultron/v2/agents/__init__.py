@@ -12,7 +12,7 @@ from .meeting_agent import MeetingAgent
 from .files_agent import FilesAgent
 from .calendar_agent import CalendarAgent
 from .task_manager_agent import TaskManagerAgent
-from .openguider_bridge import OpenGuiderBridgeAgent
+from .vision_agent import UltronVisionAgent
 from .debate_agent import DebateAgent
 
 __all__ = [
@@ -27,6 +27,6 @@ __all__ = [
     "FilesAgent",
     "CalendarAgent",
     "TaskManagerAgent",
-    "OpenGuiderBridgeAgent",
+    "UltronVisionAgent",
     "DebateAgent",
 ]

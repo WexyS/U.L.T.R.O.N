@@ -499,10 +499,13 @@ class MemoryEngine:
 
         lines = ["Lessons learned from past failures:"]
         for lesson in lessons:
+            failure_str = str(lesson.get('failure', ''))
+            root_cause_str = str(lesson.get('root_cause', ''))
+            fix_str = str(lesson.get('fix', ''))
             lines.append(
-                f"- Problem: {lesson['failure'][:100]}\n"
-                f"  Root cause: {lesson['root_cause'][:100]}\n"
-                f"  Fix: {lesson['fix'][:100]}"
+                f"- Problem: {failure_str[:100]}\n"
+                f"  Root cause: {root_cause_str[:100]}\n"
+                f"  Fix: {fix_str[:100]}"
             )
         return "\n".join(lines)
 

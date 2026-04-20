@@ -35,11 +35,12 @@ class AgentRole(str, Enum):
     CALENDAR = "calendar"
     TASK_MANAGER = "task_manager"
     ERROR_ANALYZER = "error_analyzer"
-    OPENGUIDER_BRIDGE = "openguider_bridge"
+    VISION = "openguider_bridge"
     DEBATE = "debate"
     CLONER = "cloner"
     WHATSAPP = "whatsapp"
     ARCHITECT = "architect"
+    GAMING = "gaming"
 
 
 class AgentStatus(str, Enum):

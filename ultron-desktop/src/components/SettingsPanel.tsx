@@ -19,13 +19,36 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
     notifications: true,
   });
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
     localStorage.setItem('ultron-theme', settings.theme);
     localStorage.setItem('ultron-auto-evolution', String(settings.autonomousEvolution));
     localStorage.setItem('ultron-voice-mode', String(settings.voiceMode));
     localStorage.setItem('ultron-search-depth', String(settings.searchDepth));
     localStorage.setItem('ultron-model', settings.model);
-    alert('Settings saved successfully! Some changes may require a restart.');
+
+    // Sync with backend
+    try {
+      const response = await fetch('http://localhost:8000/api/v2/config/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.model,
+          search_depth: settings.searchDepth,
+          autonomous_evolution: settings.autonomousEvolution
+        })
+      });
+      if (response.ok) {
+        alert('Settings saved and synced with Ultron Core! ✨');
+      } else {
+        alert('Settings saved locally, but backend sync failed.');
+      }
+    } catch (err) {
+      console.error('Failed to sync settings:', err);
+      alert('Settings saved locally. Backend is unreachable.');
+    }
+    
+    // Apply theme immediately
+    document.documentElement.className = settings.theme;
   };
 
   const handleChange = (key: string, value: any) => {

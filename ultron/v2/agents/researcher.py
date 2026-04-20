@@ -10,6 +10,7 @@ from ultron.v2.core.types import AgentRole, AgentStatus, Task, TaskResult, TaskS
 from ultron.v2.core.event_bus import EventBus
 from ultron.v2.core.blackboard import Blackboard
 from ultron.v2.core.llm_router import LLMRouter
+from ultron.v2.core.connectivity import ConnectivityManager
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,17 @@ class ResearcherAgent(Agent):
         try:
             query = task.description
             max_hops = task.context.get("max_hops", self.max_hops)
+            
+            # Offline Check
+            if not ConnectivityManager.is_online():
+                logger.warning("ResearcherAgent running in OFFLINE mode.")
+                offline_msg = ConnectivityManager.get_offline_recommendation("research")
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.SUCCESS,
+                    output=f"{offline_msg}\n\nSearch query: {query}\nResult: Using internal knowledge base as internet is disconnected.",
+                    metadata={"offline": True}
+                )
 
             # 1. Check for instant utilities (weather, time, etc.)
             utility_result = await self.get_realtime_utility(query)

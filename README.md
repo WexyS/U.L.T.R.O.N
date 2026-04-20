@@ -65,7 +65,7 @@ Ultron is a multi-agent assistant designed for **local-first workflows**, **tool
 | **RPAOperatorAgent** | Screen capture, OCR, mouse/keyboard automation | System control |
 | **AutonomousResearcher** | Autonomous web browsing & knowledge building | Self-learning |
 | **DebateAgent** | Multi-persona critical reasoning & argument synthesis | Critical decision making |
-| **OpenGuiderBridge** | Seamless connection with OpenGuider Desktop UI | Desktop visual awareness |
+| **UltronVision** | High-performance desktop awareness & analysis | Visual screen analysis |
 | **EmailAgent** | Async IMAP/SMTP inbox reading & summarization | Email management |
 | **SystemMonitorAgent** | Real-time CPU/RAM/disk monitoring | System health |
 | **ClipboardAgent** | Auto-detect & process clipboard content | Quick actions |
@@ -75,7 +75,8 @@ Ultron is a multi-agent assistant designed for **local-first workflows**, **tool
 ### 🎙️ Extensible Ecosystem
 - **VoiceBox Native TTS**: Auto-detection and routing to localized [Jamie Pine VoiceBox](https://github.com/jamiepine/voicebox) for ultra-realistic speech with 0-latency EdgeTTS fallback.
 - **Auto Launchers**: Self-healing boot sequence that detects missing dependencies and automatically launches GUI companions like VoiceBox on startup.
-- **OpenGuider Companion**: Native vision streaming and contextual assistance on Windows/Mac via OpenGuider UI protocol.
+- **Ultron Vision Engine**: Native vision streaming and contextual assistance on Windows/Mac via proprietary vision protocol.
+- **Ultron Neural Lab (Factory)**: Integrated fine-tuning engine for local models, supporting LoRA, QLoRA, and full-parameter tuning.
 - **Multi-Agent Debate**: When facing complex decisions, ask Ultron to *"debate"* it; it will instantiate an Advocate, Critic, and Judge personas to rigorously argue technical trade-offs before synthesizing an optimal final response.
 
 ---
@@ -109,24 +110,24 @@ Ultron supports overriding local URLs via environment variables:
 - `ULTRON_VOICEBOX_URL=http://127.0.0.1:17493`
 - `ULTRON_WORKSPACE_URL=http://127.0.0.1:8000`
 
-### 🌐 13 AI Providers with Smart Routing
-| Priority | Provider | Type | Best For |
-|----------|----------|------|----------|
-| 1 | **Ollama** | Local (Free) | Privacy, code generation |
-| 2 | **Groq** | Cloud (Free) | Speed (500 tok/s) |
-| 3 | **MiniMax** | Cloud | Self-evolving models |
-| 4 | **OpenRouter** | Cloud | 200+ models |
-| 5 | **Gemini** | Cloud | Long context (1M) |
-| 6 | **Cloudflare** | Cloud (Free) | Reliable fallback |
-| 7 | **Together** | Cloud | YLlama models |
-| 8 | **HuggingFace** | Cloud | Free inference |
-| 9 | **OpenAI** | Cloud | Ultimate fallback |
+### 🌐 Ultron Intelligence Cloud (13 Neural Channels)
+| Priority | Channel Name | Original Provider | Type | Best For |
+|----------|--------------|-------------------|------|----------|
+| 1 | **Ultron Native Core** | Ollama | Local (Free) | Privacy, code generation |
+| 2 | **Ultron Warp Speed Channel** | Groq | Cloud (Free) | Speed (500 tok/s) |
+| 3 | **Ultron Intelligence Cloud (Alpha)** | OpenAI | Cloud | Ultimate fallback |
+| 4 | **Ultron Universal Bridge** | OpenRouter | Cloud | 200+ models |
+| 5 | **Ultron Intelligence Cloud (Beta)** | Gemini | Cloud | Long context (1M) |
+| 6 | **Ultron Edge Intelligence** | Cloudflare | Cloud (Free) | Reliable fallback |
+| 7 | **Ultron Neural Network (Shared)** | Together | Cloud | YLlama models |
+| 8 | **Ultron Research Node** | HuggingFace | Cloud | Free inference |
+| 9 | **Ultron Intelligence Cloud (Prime)** | Anthropic | Cloud | Advanced reasoning |
 
-**Smart Task Routing:**
-- `fast` → Groq → DeepSeek → Fireworks
-- `code` → Ollama → DeepSeek → Anthropic
-- `long` → Gemini → OpenRouter → Anthropic
-- `cheap` → Ollama → Cloudflare → HuggingFace
+**Smart Neural Routing:**
+- `fast` → Warp Speed → Alpha → Burst
+- `code` → Native Core → Alpha → Prime
+- `long` → Beta → Universal Bridge → Prime
+- `cheap` → Native Core → Edge → Research
 
 ### 💻 Advanced UI Features
 

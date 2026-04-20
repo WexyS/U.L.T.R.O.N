@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), basicSsl()],
   server: {
     host: '0.0.0.0', // Listen on all local IPs
-    port: 5173,
+    port: 5174,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

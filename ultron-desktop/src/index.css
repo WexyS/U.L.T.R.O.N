@@ -1,150 +1,159 @@
-/* ── TAILWIND IMPORT ─────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── GLOBAL STYLES - Premium Claude/Gemini Aesthetic ─────────────────── */
+:root {
+  /* Light Theme - Claude Aesthetic */
+  --color-bg: 255 255 255;
+  --color-bg-secondary: 248 248 248;
+  --color-bg-tertiary: 240 240 240;
+  --color-panel: 255 255 255;
+  --color-card: 255 255 255;
+  --color-border: 230 230 230;
+  --color-border-light: 240 240 240;
+  --color-text: 20 20 20;
+  --color-text-secondary: 80 80 80;
+  --color-text-tertiary: 120 120 120;
+  --color-text-muted: 160 160 160;
+  --color-accent: 139 92 246; /* Purple 500 */
+  --color-accent-hover: 124 58 237; /* Purple 600 */
+  --color-success: 34 197 94;
+  --color-warning: 245 158 11;
+  --color-danger: 239 68 68;
+  
+  --glass-bg: 255 255 255 / 0.8;
+  --glass-border: 230 230 230 / 0.5;
+}
+
+.dark {
+  /* Dark Theme - Claude Aesthetic */
+  --color-bg: 18 18 18;
+  --color-bg-secondary: 28 28 28;
+  --color-bg-tertiary: 35 35 35;
+  --color-panel: 24 24 24;
+  --color-card: 32 32 32;
+  --color-border: 45 45 45;
+  --color-border-light: 40 40 40;
+  --color-text: 240 240 240;
+  --color-text-secondary: 170 170 170;
+  --color-text-tertiary: 140 140 140;
+  --color-text-muted: 100 100 100;
+  --color-accent: 139 92 246; /* Purple 500 */
+  --color-accent-hover: 167 139 250; /* Purple 400 */
+  --color-success: 34 197 94;
+  --color-warning: 245 158 11;
+  --color-danger: 239 68 68;
+  
+  --glass-bg: 24 24 24 / 0.9;
+  --glass-border: 45 45 45 / 0.5;
+}
+
 @layer base {
-  :root {
-    /* Light Theme - Soft Greys & Purples */
-    --color-bg: 252 252 253;       /* Zinc 50 */
-    --color-bg-secondary: 244 244 245;  /* Zinc 100 */
-    --color-bg-tertiary: 228 228 231;   /* Zinc 200 */
-    --color-panel: 255 255 255;
-    --color-card: 255 255 255;
-    --color-border: 228 228 231;   /* Zinc 200 */
-    --color-border-light: 244 244 245;
-    --color-text: 24 24 27;        /* Zinc 900 */
-    --color-text-secondary: 82 82 91;  /* Zinc 600 */
-    --color-text-tertiary: 161 161 170;   /* Zinc 400 */
-    --color-accent: 99 102 241;    /* Indigo 500 */
-    --color-accent-hover: 79 70 229;  /* Indigo 600 */
-    --color-success: 16 185 129;
-    --color-warning: 245 158 11;
-    --color-danger: 239 68 68;
-    
-    --shadow-premium: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-    --glass-blur: 12px;
+  html, body {
+    @apply h-full m-0 p-0 overflow-hidden font-sans;
+    background-color: rgb(var(--color-bg));
+    color: rgb(var(--color-text));
   }
 
-  .dark {
-    /* Dark Theme - Deep Space / Graphite */
-    --color-bg: 9 9 11;            /* Zinc 950 */
-    --color-bg-secondary: 24 24 27;   /* Zinc 900 */
-    --color-bg-tertiary: 39 39 42;    /* Zinc 800 */
-    --color-panel: 18 18 18;
-    --color-card: 24 24 27;
-    --color-border: 39 39 42;      /* Zinc 800 */
-    --color-border-light: 30 30 30;
-    --color-text: 250 250 250;     /* Zinc 50 */
-    --color-text-secondary: 161 161 170;  /* Zinc 400 */
-    --color-text-tertiary: 113 113 122;   /* Zinc 500 */
-    --color-accent: 129 140 248;   /* Indigo 400 */
-    --color-accent-hover: 165 180 252;
+  /* Soften everything - Rounded 3xl as standard */
+  .rounded-xl {
+    @apply rounded-2xl;
+  }
+  
+  .rounded-2xl {
+    @apply rounded-3xl;
   }
 
   * {
     @apply border-[var(--color-border)];
   }
-
-  body {
-    @apply antialiased selection:bg-indigo-500/30;
-    background-color: rgb(var(--color-bg));
-    color: rgb(var(--color-text));
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    letter-spacing: -0.01em;
-  }
 }
 
 @layer components {
   .glass-panel {
-    @apply backdrop-blur-[var(--glass-blur)] bg-white/70 dark:bg-zinc-950/70 border border-white/20 dark:border-zinc-800/20;
+    @apply backdrop-blur-xl bg-[var(--glass-bg)] border border-[var(--glass-border)];
   }
 
   .glass-card {
-    @apply backdrop-blur-[var(--glass-blur)] bg-white/40 dark:bg-zinc-900/40 border border-white/10 dark:border-zinc-800/10 shadow-sm transition-all hover:shadow-md;
+    @apply backdrop-blur-md bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg rounded-[2rem] transition-all duration-300;
   }
 
   .btn-premium {
-    @apply px-4 py-2 rounded-xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-4 py-2 rounded-2xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     background-color: rgb(var(--color-accent));
     color: white;
   }
 
-  .btn-premium:hover {
+  .btn-premium:hover:not(:disabled) {
     background-color: rgb(var(--color-accent-hover));
-    @apply shadow-lg shadow-indigo-500/20;
-  }
-
-  .message-bubble-user {
-    @apply rounded-2xl px-5 py-3 max-w-[85%] bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm;
-  }
-
-  .message-bubble-assistant {
-    @apply rounded-2xl px-5 py-3 max-w-[90%] bg-transparent text-zinc-800 dark:text-zinc-200;
-  }
-
-  .sidebar-item {
-    @apply flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100;
-  }
-
-  .sidebar-item-active {
-    @apply bg-indigo-500/10 text-indigo-600 dark:text-indigo-400;
-  }
-}
-
-@layer utilities {
-  .animate-slide-in {
-    animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .animate-fade-in {
-    animation: fadeIn 0.4s ease-out;
-  }
-
-  @keyframes slideIn {
-    from { transform: translateX(-20px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    @apply shadow-lg shadow-purple-500/20;
   }
 
   .scrollbar-premium {
     scrollbar-width: thin;
-    scrollbar-color: rgb(var(--color-bg-tertiary)) transparent;
+    scrollbar-color: rgb(var(--color-border)) transparent;
   }
 
   .scrollbar-premium::-webkit-scrollbar {
     width: 6px;
-    height: 6px;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .scrollbar-premium::-webkit-scrollbar-thumb {
-    @apply bg-zinc-300 dark:bg-zinc-700 rounded-full;
+    background: rgb(var(--color-border));
+    border-radius: 10px;
   }
 
-  .scrollbar-premium::-webkit-scrollbar-thumb:hover {
-    @apply bg-zinc-400 dark:bg-zinc-600;
+  /* Chat Bubble Styles - Claude Aesthetic */
+  .message-bubble-assistant {
+    @apply px-0 py-2 text-zinc-800 dark:text-zinc-200;
   }
 
-  /* Custom Premium Range Input */
-  input[type="range"].accent-indigo-600 {
-    @apply h-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 appearance-none cursor-pointer;
-  }
-  
-  input[type="range"].accent-indigo-600::-webkit-slider-thumb {
-    @apply appearance-none w-4 h-4 rounded-full bg-indigo-600 border-2 border-white dark:border-zinc-900 shadow-md transition-transform active:scale-125;
+  .message-bubble-user {
+    @apply px-6 py-4 rounded-[2rem] bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100 max-w-fit shadow-sm;
   }
 
-  /* Switch Toggle Styling */
-  .switch-premium {
-    @apply relative inline-flex items-center cursor-pointer;
+  .prose {
+    @apply max-w-none;
+    --tw-prose-body: rgb(var(--color-text));
+    --tw-prose-headings: rgb(var(--color-text));
+    --tw-prose-links: rgb(var(--color-accent));
+    --tw-prose-bold: rgb(var(--color-text));
+    --tw-prose-counters: rgb(var(--color-text-secondary));
+    --tw-prose-bullets: rgb(var(--color-text-tertiary));
+    --tw-prose-hr: rgb(var(--color-border));
+    --tw-prose-quotes: rgb(var(--color-text-secondary));
+    --tw-prose-quote-borders: rgb(var(--color-accent));
+    --tw-prose-captions: rgb(var(--color-text-muted));
+    --tw-prose-code: rgb(var(--color-text));
+    --tw-prose-pre-code: rgb(var(--color-text));
+    --tw-prose-pre-bg: rgb(var(--color-bg-secondary));
+    --tw-prose-th-borders: rgb(var(--color-border));
+    --tw-prose-td-borders: rgb(var(--color-border-light));
   }
-  
-  .input-premium {
-    @apply bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition-all;
-  }
+}
+
+/* Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Fix for background when theme is missing */
+html {
+  background-color: #121212;
+}
+
+html.light {
+  background-color: #ffffff;
 }
