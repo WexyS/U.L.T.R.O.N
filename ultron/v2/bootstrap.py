@@ -206,7 +206,9 @@ async def main() -> None:
     parser.add_argument("--test-rpa", action="store_true", help="Test RPA module")
     parser.add_argument("--test-coder", action="store_true", help="Test self-healing code generator")
     parser.add_argument("--status", action="store_true", help="Show system status and exit")
-    parser.add_argument("--model", default="qwen2.5:14b", help="Ollama model to use")
+    import os
+    default_model = os.getenv("ULTRON_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen2.5:14b"
+    parser.add_argument("--model", default=default_model, help="Ollama model to use")
     parser.add_argument("--work-dir", default="./workspace", help="Working directory for code execution")
     args = parser.parse_args()
 
@@ -229,6 +231,21 @@ async def main() -> None:
 
     # Enable ALL providers from environment variables
     llm_router.enable_all_providers(dict(os.environ))
+
+    # Pre-check Ollama if it's the primary provider
+    if "ollama" in healthy:
+        ollama = llm_router.providers["ollama"]
+        if not await ollama.is_available():
+            console.print("[yellow]⚠️  Ollama server is not responding at " + ollama._base_url + "[/yellow]")
+            console.print("[dim]Try running: Start-Process -FilePath \"...\\ollama.exe\" -ArgumentList \"serve\"[/dim]")
+        else:
+            # Check if model exists
+            models = await ollama.list_models()
+            if args.model not in models:
+                console.print(f"[yellow]⚠️  Model '{args.model}' not found in Ollama.[/yellow]")
+                console.print(f"[dim]Run: ollama pull {args.model}[/dim]")
+                if models:
+                    console.print(f"[dim]Available models: {', '.join(models)}[/dim]")
 
     # Check availability
     healthy = llm_router.get_healthy_providers()

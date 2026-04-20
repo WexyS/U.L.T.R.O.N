@@ -11,6 +11,8 @@ import TrainingPanel from './components/TrainingPanel';
 import StatusBadge from './components/StatusBadge';
 import ConversationSidebar from './components/ConversationSidebar';
 import InspectorPanel from './components/InspectorPanel';
+import ReasoningChain, { ReActStep } from './components/ReasoningChain';
+import SkillsPanel from './components/SkillsPanel';
 import { 
   Settings, PanelRightOpen, PanelRightClose, 
   WifiOff, Sun, Moon, PanelLeftClose, PanelLeftOpen, Type
@@ -18,7 +20,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL } from './config';
 
-type ActivePanel = 'chat' | 'workspace' | 'agents' | 'training' | 'composer' | 'settings';
+type ActivePanel = 'chat' | 'workspace' | 'agents' | 'skills' | 'training' | 'composer' | 'settings';
 type Theme = 'light' | 'dark';
 type FontSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -52,6 +54,25 @@ function App() {
     return (localStorage.getItem('ultron-font-size') as FontSize) || 'md';
   });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [reasoningSteps, setReasoningSteps] = useState<ReActStep[]>([]);
+
+  // ── Ultron v3.0 WebSocket Event Bridge ─────────────────────────────
+  useEffect(() => {
+    const wsUrl = API_URL.replace('http', 'ws') + '/api/v3/ws/events';
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'event' && msg.data.type === 'reasoning_step') {
+        setReasoningSteps(prev => [...prev, msg.data.step]);
+      }
+    };
+
+    ws.onopen = () => console.log('v3.0 Event Bridge Connected');
+    ws.onclose = () => console.log('v3.0 Event Bridge Disconnected');
+
+    return () => ws.close();
+  }, []);
 
   // Apply theme & font size
   useEffect(() => {
@@ -204,6 +225,7 @@ function App() {
               <button onClick={() => setActivePanel('chat')} className={`px-3 lg:px-5 py-1.5 lg:py-2 text-xs lg:text-sm font-semibold rounded-xl transition-all ${activePanel === 'chat' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>CHAT</button>
               <button onClick={() => setActivePanel('workspace')} className={`px-3 lg:px-5 py-1.5 lg:py-2 text-xs lg:text-sm font-semibold rounded-xl transition-all ${activePanel === 'workspace' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>WORK</button>
               <button onClick={() => setActivePanel('agents')} className={`px-3 lg:px-5 py-1.5 lg:py-2 text-xs lg:text-sm font-semibold rounded-xl transition-all ${activePanel === 'agents' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>AGENTS</button>
+              <button onClick={() => setActivePanel('skills')} className={`px-3 lg:px-5 py-1.5 lg:py-2 text-xs lg:text-sm font-semibold rounded-xl transition-all ${activePanel === 'skills' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-zinc-100' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>SKILLS</button>
               <button onClick={() => setActivePanel('composer')} className={`px-3 lg:px-5 py-1.5 lg:py-2 text-xs lg:text-sm font-semibold rounded-xl transition-all ${activePanel === 'composer' ? 'bg-purple-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100'}`}>COMPOSER</button>
             </div>
           </div>
@@ -258,6 +280,11 @@ function App() {
                   isProcessing={isStreaming && !currentResponse}
                 />
                 
+                {/* Ultron v3.0 Reasoning Chain Overlay */}
+                <div className="absolute top-20 right-8 w-80 z-20 pointer-events-auto">
+                  <ReasoningChain steps={reasoningSteps} />
+                </div>
+                
                 {/* Input Area — Integrated look with subtle separator */}
                 <div className="flex-shrink-0 bg-zinc-50/50 dark:bg-[#121212]/50 backdrop-blur-sm border-t border-zinc-200 dark:border-zinc-800/50">
                   <div className="max-w-4xl mx-auto px-4 py-4 lg:px-8">
@@ -275,6 +302,7 @@ function App() {
               <div className="flex-1 overflow-y-auto">
                 {activePanel === 'workspace' && <WorkspacePanel />}
                 {activePanel === 'agents' && <AgentsPanel />}
+                {activePanel === 'skills' && <SkillsPanel />}
                 {activePanel === 'training' && <TrainingPanel />}
                 {activePanel === 'composer' && <ComposerPanel />}
                 {activePanel === 'settings' && <SettingsPanel />}

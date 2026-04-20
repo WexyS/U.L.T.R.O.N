@@ -140,7 +140,7 @@ export function useUltron({
         setMessages(msgs.map((m: any) => ({
           role: m.role,
           content: m.content,
-          timestamp: m.timestamp || Date.now()
+          timestamp: m.created_at || m.timestamp || Date.now()
         })));
         setActiveConversationId(id);
       }
@@ -211,6 +211,8 @@ export function useUltron({
         setIsConnected(true);
         reconnectAttempts.current = 0;
         setError(null);
+        // Request immediate status sync
+        ws.send(JSON.stringify({ type: 'ping' }));
       };
 
       ws.onclose = (event) => {
@@ -321,7 +323,18 @@ export function useUltron({
   // Auto-connect on mount
   useEffect(() => {
     connect();
-    return () => disconnect();
+    
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 15000);
+
+    return () => {
+      disconnect();
+      clearInterval(heartbeat);
+    };
   }, [connect, disconnect]);
 
   return {

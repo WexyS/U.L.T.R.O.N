@@ -18,8 +18,8 @@ class OllamaProviderV2(BaseProvider):
         super().__init__(ProviderConfig(
             name="ollama",
             api_key=None,  # key gereksiz
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            default_model=os.getenv("OLLAMA_MODEL", "qwen2.5:14b"),
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+            default_model=os.getenv("ULTRON_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen2.5:14b",
             max_tokens=8192,
             timeout=120,
             priority=1,

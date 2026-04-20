@@ -98,11 +98,12 @@ class OllamaProvider(LLMProvider):
 
     def __init__(
         self,
-        model: str = "qwen2.5:14b",
-        base_url: str = "http://localhost:11434",
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
     ) -> None:
-        self._model = model
-        self._base_url = base_url
+        import os
+        self._model = model or os.getenv("ULTRON_MODEL") or os.getenv("OLLAMA_MODEL") or "qwen2.5:14b"
+        self._base_url = base_url or os.getenv("OLLAMA_BASE_URL") or "http://127.0.0.1:11434"
         self._available: Optional[bool] = None
         self.stats = ProviderStats()
 
@@ -116,10 +117,9 @@ class OllamaProvider(LLMProvider):
     def is_available(self) -> bool:
         """Check if Ollama is accessible. Reactive check (no long-term caching)."""
         try:
-            import httpx
             # Use 127.0.0.1 for better compatibility on Windows
             url = self._base_url.replace("localhost", "127.0.0.1")
-            resp = httpx.get(f"{url}/api/tags", timeout=2)
+            resp = httpx.get(f"{url}/api/tags", timeout=3)
             self._available = resp.status_code == 200
             return self._available
         except Exception:
@@ -443,11 +443,11 @@ class LLMRouter:
 
     def __init__(
         self,
-        ollama_model: str = "qwen2.5-coder:14b",
+        ollama_model: Optional[str] = None,
         vllm_model: Optional[str] = None,
         openai_model: Optional[str] = None,
         openai_api_key: Optional[str] = None,
-        ollama_base_url: str = "http://localhost:11434",
+        ollama_base_url: Optional[str] = None,
         vllm_base_url: str = "http://localhost:8000/v1",
     ) -> None:
         # Normalize model names to handle common mismatches
@@ -1139,3 +1139,12 @@ class OpenRouterProvider(LLMProvider):
         async for chunk in st:
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
+
+# ── Global Router Instance ───────────────────────────────────────────
+# For v3.0, we provide a shared instance that agents can use directly.
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+router = LLMRouter(ollama_model=os.getenv("ULTRON_MODEL", "qwen2.5:14b"))
+router.enable_all_providers(dict(os.environ))

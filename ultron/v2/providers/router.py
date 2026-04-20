@@ -55,11 +55,11 @@ class ProviderRouter:
             if airllm_provider.is_configured():
                 self.providers["airllm"] = airllm_provider
                 self.priority_order.append("airllm")
-                print(f"[Router] ✓ airllm aktif ({airllm_provider.config.default_model})")
+                print(f"[Router] [OK] airllm aktif ({airllm_provider.config.default_model})")
             else:
-                print(f"[Router] ✗ airllm yüklü değil (pip install airllm)")
+                print(f"[Router] [X] airllm yüklü değil (pip install airllm)")
         except Exception as e:
-            print(f"[Router] ✗ airllm yükleme hatası: {e}")
+            print(f"[Router] [X] airllm yükleme hatası: {e}")
 
         for cls in [
             OllamaProvider,
@@ -76,9 +76,9 @@ class ProviderRouter:
             if p.is_configured():
                 self.providers[p.config.name] = p
                 self.priority_order.append(p.config.name)
-                print(f"[Router] ✓ {p.config.name} aktif")
+                print(f"[Router] [OK] {p.config.name} aktif")
             else:
-                print(f"[Router] ✗ {p.config.name} key yok, atlandı")
+                print(f"[Router] [X] {p.config.name} key yok, atlandı")
 
     async def route(
         self,

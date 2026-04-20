@@ -5,6 +5,8 @@ import os
 import hashlib
 import json
 import re
+from datetime import datetime
+import pytz
 from functools import lru_cache
 
 from ultron.v2.agents.base import Agent
@@ -115,7 +117,6 @@ class ResearcherAgent(Agent):
             # ── Fast Path 2: Architectural UI Analysis ──
             if task.intent == "architect" or any(kw in task.description.lower() for kw in ["mimari", "architect", "clone", "klonla"]):
                 # Extract URL
-                import re
                 url_match = re.search(r'https?://\S+', task.description)
                 if url_match:
                     target_url = url_match.group(0)
@@ -139,7 +140,6 @@ class ResearcherAgent(Agent):
 
             # ── Fast Path 3: Deep Data Extraction (Scraping/Profile) ──
             if any(kw in task.description.lower() for kw in ["çal", "scrape", "profil", "ekstrak", "veri topla"]):
-                import re
                 url_match = re.search(r'https?://\S+', task.description)
                 if url_match:
                     target_url = url_match.group(0)
@@ -272,7 +272,6 @@ class ResearcherAgent(Agent):
             return result if result and len(result) > 2 else query
         except Exception:
             # Fallback: manual Turkish/English filler removal
-            import re
             fillers = (
                 r'\b(hakkında|ne biliyorsun|bana anlat|nedir|araştır|'
                 r'bul|açıkla|öğren|ne|bir|bu|şu|var mı|'
@@ -413,9 +412,6 @@ class ResearcherAgent(Agent):
 
     async def get_realtime_utility(self, query: str) -> str:
         """Handle weather, time zones, and instant utility requests for any location (with offline support)."""
-        from datetime import datetime
-        import pytz
-        
         q = query.lower()
         
         # ── Time Zones (Universal & Offline Ready) ──

@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
         from ultron.v2.memory.engine import MemoryEngine
         from ultron.v2.core.orchestrator import Orchestrator
 
-        llm_model = os.getenv("ULTRON_MODEL", "qwen2.5:32b")
+        llm_model = os.getenv("ULTRON_MODEL", "qwen2.5:14b")
         llm = LLMRouter(ollama_model=llm_model)
         llm.enable_all_providers(dict(os.environ))
         memory = MemoryEngine(persist_dir="./data/memory_v2")
@@ -140,6 +140,35 @@ async def lifespan(app: FastAPI):
         else:
             logger.error("Failed to initialize: %s", e, exc_info=True)
         _orchestrator = None
+
+    # ── Ultron v3.0 Initialization ─────────────────────────────────────
+    try:
+        from ultron.v2.core.agent_registry import registry
+        from ultron.v2.core.react_orchestrator import ReActOrchestrator
+        import ultron.v2.agents as agents_pkg
+        
+        # 1. Register Orchestrator if not exists
+        if not registry.get_agent("ReActOrchestrator"):
+            registry.register(ReActOrchestrator())
+            
+        # 2. Register all specialized agents
+        for attr_name in agents_pkg.__all__:
+            if attr_name == "Agent":
+                continue
+            
+            agent_cls = getattr(agents_pkg, attr_name)
+            try:
+                # Instantiate and register
+                instance = agent_cls()
+                if not registry.get_agent(instance.name):
+                    registry.register(instance)
+            except Exception as inner_e:
+                logger.debug(f"Could not auto-register {attr_name}: {inner_e}")
+            
+        logger.info(f"Ultron v3.0 Infrastructure Ready. {len(registry.list_agents())} agents active.")
+    except Exception as e:
+        logger.error(f"v3.0 Init Error: {e}")
+
     yield
     if _use_structlog:
         logger.info("shutdown_started")
@@ -197,6 +226,8 @@ app.include_router(training_router)
 app.include_router(conversations_router)
 app.include_router(composer_router)
 app.include_router(voice_router)
+from ultron.api.routes.v3_chat import router as v3_router
+app.include_router(v3_router)
 
 # ── Config API ────────────────────────────────────────────────────────
 class ConfigUpdateRequest(BaseModel):

@@ -105,7 +105,7 @@ export default function InputBox({ onSend, disabled, isConnected }: InputBoxProp
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={
-            !isConnected ? 'Bağlantı bekleniyor...' :
+            !isConnected ? 'Ultron v3.0 Bağlantısı bekleniyor...' :
             mode === 'chat'     ? 'Nasıl yardımcı olabilirim?' :
             mode === 'code'     ? 'Yazmamı istediğin kodu tarif et...' :
             mode === 'research' ? 'Neyi araştırmamı istersin?' :
@@ -146,7 +146,7 @@ export default function InputBox({ onSend, disabled, isConnected }: InputBoxProp
       <p className="text-center text-zinc-400 dark:text-zinc-600" style={{ fontSize: '10px' }}>
         {isConnected
           ? (disabled ? '⟳ İşleniyor...' : 'Enter gönder  •  Shift+Enter yeni satır')
-          : '⚠ Ultron Core bekleniyor...'}
+          : '⚠ Ultron v3.0 Engine bekleniyor...'}
       </p>
     </div>
   );

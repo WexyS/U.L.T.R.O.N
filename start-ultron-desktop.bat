@@ -5,7 +5,7 @@ color 0B
 
 echo.
 echo ============================================================
-echo   ULTRON AGI v2.2 - MASTER UNIFIED LAUNCHER
+echo   ULTRON AGI v3.0 - MASTER UNIFIED LAUNCHER
 echo ============================================================
 echo.
 

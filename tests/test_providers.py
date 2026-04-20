@@ -8,8 +8,8 @@ async def test():
     print("Aktif providers:", r.list_providers())
     status = await r.provider_status()
     for name, s in status.items():
-        icon = "✓" if s["available"] else "✗"
-        print(f"  {icon} {name}: {s['latency_ms']}ms - {s['model']}")
+        icon = "OK" if s["available"] else "X"
+        print(f"  [{icon}] {name}: {s['latency_ms']}ms - {s['model']}")
 
 
 asyncio.run(test())

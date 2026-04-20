@@ -1659,7 +1659,7 @@ class Orchestrator:
             },
             "llm_providers": self.llm_router.get_status(),
             "memory": self.memory.stats(),
-            "event_bus_events": len(self.event_bus.get_recent_events(100)),
+            "event_bus_events": len(self.event_bus.get_history(100)),
             # AGI Core Systems
             "reasoning": self.reasoning.get_stats(),
             "planner": self.planner.get_stats(),

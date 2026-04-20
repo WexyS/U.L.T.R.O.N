@@ -74,8 +74,10 @@ export default function ConversationSidebar({
     setShowMenuId(null);
   }, [onDeleteConversation]);
 
-  const formatTime = (timestamp: number) => {
+  const formatTime = (timestamp: any) => {
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Tarih belirsiz';
+
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffHours = diffMs / (1000 * 60 * 60);
@@ -220,8 +222,18 @@ function groupByTime(conversations: Conversation[]): Record<string, Conversation
   const now = new Date();
   const groups: Record<string, Conversation[]> = {};
 
-  conversations.sort((a, b) => b.updatedAt - a.updatedAt).forEach(conv => {
+  [...conversations].sort((a, b) => {
+    const dateA = new Date(a.updatedAt).getTime();
+    const dateB = new Date(b.updatedAt).getTime();
+    return dateB - dateA;
+  }).forEach(conv => {
     const date = new Date(conv.updatedAt);
+    if (isNaN(date.getTime())) {
+      const group = 'Daha Eski';
+      if (!groups[group]) groups[group] = [];
+      groups[group].push(conv);
+      return;
+    }
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 

@@ -43,10 +43,14 @@ class BrowserService:
             title = await page.title()
             content = await page.evaluate("() => document.body.innerText")
             
-            # Optional: Screenshot
+            # Optional: Screenshot (with timeout to prevent hanging on fonts/animations)
             screenshot_name = f"scrape_{hash(url)}_{int(datetime.now().timestamp())}.png"
             screenshot_path = self.data_dir / screenshot_name
-            await page.screenshot(path=str(screenshot_path))
+            try:
+                await page.screenshot(path=str(screenshot_path), timeout=10000, animations="disabled")
+            except Exception as se:
+                logger.warning("Screenshot failed for %s (skipping): %s", url, se)
+                screenshot_path = None
             
             await page.close()
             
@@ -54,7 +58,7 @@ class BrowserService:
                 "url": url,
                 "title": title,
                 "content": content,
-                "screenshot": str(screenshot_path),
+                "screenshot": str(screenshot_path) if screenshot_path else None,
                 "timestamp": datetime.now().isoformat()
             }
         except Exception as e:

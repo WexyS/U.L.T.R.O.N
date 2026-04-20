@@ -1,8 +1,8 @@
-import { Settings, Trash2, MessageSquare, Globe, Activity, Zap, Bot, Mic, LayoutGrid } from 'lucide-react';
+import { Settings, Trash2, MessageSquare, Globe, Activity, Zap, Bot, Mic, LayoutGrid, Book } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { API_URL } from '../config';
 
-type ActivePanel = 'chat' | 'workspace' | 'agents' | 'training' | 'composer' | 'settings';
+type ActivePanel = 'chat' | 'workspace' | 'agents' | 'skills' | 'training' | 'composer' | 'settings';
 
 interface SidebarProps {
   status: any;
@@ -26,6 +26,7 @@ export default function Sidebar({
     { id: 'chat', label: 'Chat', icon: MessageSquare },
     { id: 'workspace', label: 'Workspace', icon: Globe },
     { id: 'agents', label: 'Agents', icon: LayoutGrid },
+    { id: 'skills', label: 'Skills', icon: Book },
   ];
 
   if (isCollapsed) {
@@ -79,7 +80,7 @@ export default function Sidebar({
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-purple-600 text-white shadow-lg shadow-purple-500/20">
             <Bot className="w-6 h-6" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white font-serif">Ultron</h1>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white font-serif">Ultron <span className="text-xs text-purple-500 align-top ml-1">v3.0</span></h1>
         </div>
       </div>
 
