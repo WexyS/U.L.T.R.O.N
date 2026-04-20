@@ -139,6 +139,10 @@ class RPAOperatorAgent(Agent):
                 time.sleep(1)
                 result = TaskResult(task_id=task.id, status=TaskStatus.SUCCESS,
                                    output="✅ alt+tab sent — window switched")
+            elif action == "list_apps":
+                result = await self._list_installed_apps(task)
+            elif action == "media_control":
+                result = await self._media_control(task)
             elif action == "auto":
                 # Autonomous: describe screen, plan, and execute
                 result = await self._autonomous_action(task)
@@ -188,6 +192,21 @@ class RPAOperatorAgent(Agent):
             output=f"Screenshot saved to {filepath} ({sct_img.size[0]}x{sct_img.size[1]})",
             tool_calls=[ToolCall(name="screenshot", arguments={"region": region}, success=True)],
         )
+
+    async def _get_screenshot_base64(self, task: Task) -> str:
+        """Capture screenshot and return as base64 string."""
+        import mss
+        import mss.tools
+        import base64
+        from io import BytesIO
+        from PIL import Image
+
+        with mss.mss() as sct:
+            sct_img = sct.grab(sct.monitors[1]) # Primary monitor
+            img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+            buffered = BytesIO()
+            img.save(buffered, format="PNG")
+            return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
     async def _ocr_read(self, task: Task) -> TaskResult:
         """Read text from screen using OCR."""
@@ -341,6 +360,27 @@ class RPAOperatorAgent(Agent):
         "outlook": "outlook",
         "teams": "teams",
         "mail": "outlook",
+        "not defteri": "notepad",
+        "steam": "steam://open/main",
+        "epic": "com.epicgames.launcher://",
+        "epic games": "com.epicgames.launcher://",
+        "cs2": "steam://rungameid/730",
+        "cs 2": "steam://rungameid/730",
+        "counter strike": "steam://rungameid/730",
+        "counter-strike 2": "steam://rungameid/730",
+        "dota": "steam://rungameid/570",
+        "pubg": "steam://rungameid/578080",
+        "valorant": "valorant",
+        "league of legends": "leagueClient",
+        "lol": "leagueClient",
+        "obs": "obs64",
+        "zoom": "zoom",
+        "vlc": "vlc",
+        "chrome": "chrome",
+        "firefox": "firefox",
+        "edge": "msedge",
+        "notepad": "notepad",
+        "calculator": "calc",
     }
 
     SAFE_SITE_MAP: dict[str, str] = {
@@ -359,6 +399,72 @@ class RPAOperatorAgent(Agent):
         "netflix": "https://netflix.com",
         "amazon": "https://amazon.com",
     }
+
+    async def _list_installed_apps(self, task: Task) -> TaskResult:
+        """Scan Windows registry and common paths for installed software."""
+        import winreg
+        import os
+
+        apps = set()
+        
+        # 1. Check Registry (Uninstalls)
+        registry_paths = [
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ]
+
+        for hive, path in registry_paths:
+            try:
+                with winreg.OpenKey(hive, path) as key:
+                    for i in range(winreg.QueryInfoKey(key)[0]):
+                        try:
+                            subkey_name = winreg.EnumKey(key, i)
+                            with winreg.OpenKey(key, subkey_name) as subkey:
+                                name, _ = winreg.QueryValueEx(subkey, "DisplayName")
+                                apps.add(name)
+                        except: continue
+            except: continue
+
+        # 2. Add Steam Games
+        steam_games = self._list_steam_games()
+        for game in steam_games:
+            apps.add(f"Steam: {game}")
+
+        sorted_apps = sorted(list(apps))
+        
+        # Store in blackboard for other agents
+        await self.blackboard.set("installed_apps", sorted_apps)
+
+        return TaskResult(
+            task_id=task.id,
+            status=TaskStatus.SUCCESS,
+            output=f"✅ {len(sorted_apps)} uygulama bulundu.\n\n" + "\n".join(sorted_apps[:50]) + ("\n..." if len(sorted_apps) > 50 else "")
+        )
+
+    async def _media_control(self, task: Task) -> TaskResult:
+        """Control media playback (Play, Pause, Volume)."""
+        import pyautogui
+        action = task.context.get("media_action", "").lower()
+        
+        if "dur" in action or "pause" in action or "stop" in action:
+            pyautogui.press('playpause')
+            output = "⏸️ Medya durduruldu."
+        elif "başlat" in action or "play" in action or "devam" in action:
+            pyautogui.press('playpause')
+            output = "▶️ Medya başlatıldı."
+        elif "ses" in action and "aç" in action:
+            for _ in range(5): pyautogui.press('volumeup')
+            output = "🔊 Ses artırıldı."
+        elif "ses" in action and "kıs" in action:
+            for _ in range(5): pyautogui.press('volumedown')
+            output = "🔉 Ses azaltıldı."
+        else:
+            # Try spacebar as fallback for focused video players
+            pyautogui.press('space')
+            output = "⌨️ Boşluk tuşu gönderildi (Play/Pause fallback)."
+
+        return TaskResult(task_id=task.id, status=TaskStatus.SUCCESS, output=output)
 
     def _safe_launch_executable(self, exe_name: str) -> bool:
         """Launch a whitelisted executable safely — NO shell=True, NO user input in cmd."""
@@ -383,10 +489,39 @@ class RPAOperatorAgent(Agent):
         try:
             os.startfile(exe_name)
             return True
-        except Exception:
+        except Exception as e:
+            logger.error("Error launching %s: %s", exe_name, e)
             return False
 
-    def _resolve_app_name(self, description: str) -> tuple[str | None, str | None]:
+    def _list_steam_games(self) -> list[str]:
+        """Read Steam manifest files to list installed games."""
+        import os
+        import re
+        
+        steam_paths = [
+            r"C:\Program Files (x86)\Steam\steamapps",
+            r"D:\SteamLibrary\steamapps",
+            r"E:\SteamLibrary\steamapps",
+        ]
+        
+        games = []
+        for path in steam_paths:
+            if not os.path.exists(path):
+                continue
+                
+            for file in os.listdir(path):
+                if file.startswith("appmanifest_") and file.endswith(".acf"):
+                    try:
+                        with open(os.path.join(path, file), "r", encoding="utf-8", errors="ignore") as f:
+                            content = f.read()
+                            name_match = re.search(r'"name"\s+"([^"]+)"', content)
+                            if name_match:
+                                games.append(name_match.group(1))
+                    except Exception:
+                        continue
+        return sorted(list(set(games)))
+
+    def _resolve_app_name(self, description: str, task_context: dict = None) -> tuple[str | None, str | None]:
         """Resolve a natural language description to a safe exe name and/or URL.
 
         Returns (exe_name_or_None, url_or_None).
@@ -407,6 +542,24 @@ class RPAOperatorAgent(Agent):
                 resolved_exe = exe
                 break
 
+        # Check memory lessons for learned aliases
+        if not resolved_exe and not resolved_url:
+            lesson_context = task_context.get("lesson_context", "") if task_context else ""
+            if lesson_context:
+                import re
+                # Look for patterns like "X is actually Y" or "X refers to Y" or "X = Y"
+                alias_match = re.search(rf"\b{re.escape(desc_lower)}\b\s+(?:is|refers to|actually|yani|=)\s+([\w\s.-]+)", lesson_context, re.IGNORECASE)
+                if alias_match:
+                    learned_name = alias_match.group(1).strip().lower()
+                    logger.info(f"Memory alias found: {desc_lower} -> {learned_name}")
+                    # Re-check with the learned name
+                    for app, exe in self.SAFE_APP_MAP.items():
+                        if app in learned_name:
+                            resolved_exe = exe
+                    for site, url in self.SAFE_SITE_MAP.items():
+                        if site in learned_name:
+                            resolved_url = url
+
         return resolved_exe, resolved_url
 
     async def _launch_app(self, task: Task) -> TaskResult:
@@ -414,7 +567,7 @@ class RPAOperatorAgent(Agent):
         import webbrowser
 
         app_name = task.context.get("app_name", "") or task.description
-        resolved_exe, resolved_url = self._resolve_app_name(app_name)
+        resolved_exe, resolved_url = self._resolve_app_name(app_name, task_context=task.context)
 
         # Try website first
         if resolved_url:
@@ -458,15 +611,13 @@ class RPAOperatorAgent(Agent):
         # 1. Take screenshot
         await self._screenshot(task)
 
-        # 2. Use LLM to identify coordinates
-        messages = self._build_messages(
-            f"I need to find and click on: '{task.description}'\n\n"
-            f"Describe the exact coordinates where I should click. "
-            f"Return ONLY a JSON object with x and y coordinates.\n"
-            f"Format: {{\"x\": 123, \"y\": 456, \"confidence\": 0.9}}"
+        # 2. Use Vision LLM to identify coordinates
+        image_b64 = await self._get_screenshot_base64(task)
+        prompt = (
+            f"Find the exact X, Y coordinates for the following element: '{task.description}'\n"
+            f"Return ONLY a raw JSON object: {{\"x\": number, \"y\": number, \"confidence\": number}}"
         )
-
-        response = await self._llm_chat(messages)
+        response = await self.llm_router.vision_chat(prompt, image_b64)
         import json
         import re
 
@@ -518,10 +669,30 @@ class RPAOperatorAgent(Agent):
                 app_to_open = app.title()
                 break
 
-        # Check for open keywords
+        # Check for open/close keywords
         open_keywords = ["aç", "ac", "open", "başlat", "baslat", "launch",
                          "çalıştır", "calistir", "run", "git", "go to", "site"]
+        close_keywords = ["kapat", "cik", "çık", "close", "exit", "kill", "sonlandır", "durdur"]
+        
         is_open_task = any(kw in desc for kw in open_keywords)
+        is_close_task = any(kw in desc for kw in close_keywords)
+        is_list_task = any(kw in desc for kw in ["listele", "göster", "neler var", "list", "show"])
+        
+        # Steam Library Special Path
+        if "steam" in desc and is_list_task:
+            games = self._list_steam_games()
+            if games:
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.SUCCESS,
+                    output=f"Steam Kütüphanesi:\n" + "\n".join(f"- {g}" for g in games)
+                )
+            else:
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.SUCCESS,
+                    output="Steam kütüphanesinde yüklü oyun bulunamadı veya Steam yolu saptanamadı."
+                )
 
         # Website detection
         site_map = {
@@ -543,20 +714,67 @@ class RPAOperatorAgent(Agent):
                 website_url = url
                 if not app_to_open:
                     app_to_open = site.title()
+                
+                # Special handling for YouTube search queries
+                if site == "youtube" or site == "youtube.com":
+                    # Remove open/play keywords and 'youtube' from the description to get the query
+                    import re
+                    from urllib.parse import quote_plus
+                    
+                    query = desc
+                    for kw in open_keywords + ["youtube", "youtube.com", "lütfen", "aç", "oynat", "play"]:
+                        query = re.sub(rf"\b{kw}\b", "", query, flags=re.IGNORECASE)
+                    
+                    query = query.strip()
+                    if query and len(query) > 1:
+                        # Auto-fetch first video ID to play it directly instead of just searching
+                        try:
+                            import urllib.request
+                            import re
+                            search_url = f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+                            headers = {'User-Agent': 'Mozilla/5.0'}
+                            req = urllib.request.Request(search_url, headers=headers)
+                            with urllib.request.urlopen(req) as response:
+                                html = response.read().decode()
+                                video_ids = re.findall(r"watch\?v=(\S{11})", html)
+                                if video_ids:
+                                    website_url = f"https://www.youtube.com/watch?v={video_ids[0]}"
+                                    logger.info(f"YouTube auto-play found video ID: {video_ids[0]}")
+                                else:
+                                    website_url = search_url
+                        except Exception as e:
+                            logger.warning(f"YouTube auto-play search failed: {e}")
+                            website_url = f"https://www.youtube.com/results?search_query={quote_plus(query)}"
+                
                 break
 
         if app_to_open and (is_open_task or website_url):
             steps.append(f"Fast path: Opening {app_to_open}")
             try:
                 # SECURITY: Use the whitelist-based resolver
-                resolved_exe, resolved_url = self._resolve_app_name(desc)
+                resolved_exe, resolved_url = self._resolve_app_name(desc, task_context=task.context)
 
                 # Override with detected website_url if available
                 if website_url:
                     resolved_url = website_url
 
-                # Step 1: Open URL if we have one
-                if resolved_url:
+                # Step 1: Handle Close Task
+                if is_close_task:
+                    import subprocess
+                    if resolved_exe:
+                        # SECURITY: Whitelist-only taskkill
+                        exe_base = resolved_exe.split(".")[0]
+                        subprocess.run(["taskkill", "/F", "/IM", f"{exe_base}.exe"], 
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        steps.append(f"✅ {app_to_open} kapatıldı")
+                        return TaskResult(
+                            task_id=task.id,
+                            status=TaskStatus.SUCCESS,
+                            output="\n".join(steps),
+                        )
+
+                # Step 2: Open URL if we have one (Open task)
+                if resolved_url and is_open_task:
                     import webbrowser
                     webbrowser.open(resolved_url)
                     steps.append(f"✅ {resolved_url} tarayıcıda açıldı")
@@ -574,9 +792,39 @@ class RPAOperatorAgent(Agent):
                     else:
                         steps.append(f"❌ {app_to_open} başlatılamadı")
 
-                    # Wait for app to appear
+                    # Wait for app to appear and focus
                     import time
                     time.sleep(2)
+                    
+                    # Optional: Type text if requested in description
+                    type_text = task.context.get("type_text") or task.context.get("text")
+                    if not type_text:
+                        import re
+                        # Pattern 1: [Keyword] [Text] (e.g., "yaz Merhaba")
+                        write_match = re.search(r"(?:yaz|yazısı|not al|type|mesajı)\s+[:'\" ]?(.+?)['\"]?$", desc, re.IGNORECASE)
+                        if write_match:
+                            type_text = write_match.group(1)
+                        else:
+                            # Pattern 2: [Text] [Keyword] (e.g., "Merhaba yaz")
+                            write_match_rev = re.search(r"['\"]?(.+?)['\"]?\s+(?:yaz|yazısı|yazmasını|yazdır|not al)\b", desc, re.IGNORECASE)
+                            if write_match_rev:
+                                type_text = write_match_rev.group(1)
+                    
+                    if success and type_text:
+                        # Intelligent Expansion: If the text to type looks like a question or instruction, expand it via LLM
+                        if any(kw in type_text.lower() for kw in ["sorusunun", "hakkında", "nedir", "cevap", "answer", "about"]):
+                            logger.info(f"Expanding type_text via LLM: {type_text}")
+                            try:
+                                prompt = f"Kullanıcı bilgisayarda bir yere şunu yazmanı istiyor: '{type_text}'. Lütfen sadece yazılması gereken asıl içeriği üret. Kısa ve öz ol."
+                                response = await self.llm_router.chat([{"role": "user", "content": prompt}])
+                                type_text = response.content.strip().replace('"', '')
+                                logger.info(f"Expanded text: {type_text}")
+                            except Exception as e:
+                                logger.warning(f"LLM expansion failed, typing original text: {e}")
+
+                        import pyautogui
+                        pyautogui.typewrite(type_text, interval=0.01)
+                        steps.append(f"⌨️ Metin yazıldı: {type_text[:50]}...")
 
                     return TaskResult(
                         task_id=task.id,
@@ -589,37 +837,60 @@ class RPAOperatorAgent(Agent):
                 steps.append(f"❌ Fast path failed: {e}")
                 # Fall through to full RPA loop
 
-        # ─── FULL PATH: Screenshot → OCR → Plan → Execute with Verification ───
+        # ─── MULTIMODAL VISION PATH ───
         try:
-            ss_result = await self._screenshot(task)
-            steps.append(f"Observation: {ss_result.output}")
+            image_b64 = await self._get_screenshot_base64(task)
+            
+            vision_prompt = (
+                f"Senden bir bilgisayar otomasyonu görevi yapmanı istiyorum.\n"
+                f"GÖREV: {task.description}\n\n"
+                f"Ekran görüntüsüne bakarak şunları yap:\n"
+                f"1. Gerekli buton, metin kutusu veya simgeleri tespit et.\n"
+                f"2. Bunların yaklaşık X, Y koordinatlarını belirle (Ekran çözünürlüğü tam boyuttur).\n"
+                f"3. Görevi tamamlamak için gereken adım listesini JSON formatında üret.\n\n"
+                f"Eylemler: mouse_click(x,y), type_text(text), hotkey(keys), launch_app(name)\n\n"
+                f"SADECE ham JSON dizisi döndür (Markdown ```json blokları OLMASIN)."
+            )
+            
+            vision_res = await self.llm_router.vision_chat(vision_prompt, image_b64)
+            plan_text = vision_res.content.strip()
+            
+            # Clean JSON
+            import re
+            plan_text = re.sub(r"```json\s*|\s*```", "", plan_text)
+            actions = json.loads(plan_text)
+            
+            for act in actions:
+                name = act.get("action")
+                params = act.get("params", {})
+                
+                if name == "mouse_click":
+                    pyautogui.click(params.get("x"), params.get("y"))
+                elif name == "type_text":
+                    pyautogui.typewrite(params.get("text"), interval=0.01)
+                elif name == "hotkey":
+                    pyautogui.hotkey(*params.get("keys"))
+                elif name == "launch_app":
+                    self._safe_launch_executable(params.get("name"))
+                
+                steps.append(f"Vision Action: {name} ({params})")
+                await asyncio.sleep(1)
+
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.SUCCESS,
+                output="\n".join(steps),
+            )
+        except Exception as e:
+            logger.warning(f"Vision path failed, falling back to OCR: {e}")
+            steps.append(f"Vision Error: {e} - Falling back to OCR")
+
+        # ─── FALLBACK PATH: OCR → Plan → Execute ───
+        try:
             ocr_result = await self._ocr_read(task)
-            screen_text = ocr_result.output[:500]
-        except (RuntimeError, Exception) as e:
-            if "mss" in str(e).lower() or "screenshot" in str(e).lower():
-                steps.append(f"Observation: SKIPPED ({e})")
-                screen_text = "(Ekran görüntüsü alınamadı)"
-            else:
-                steps.append(f"Observation ERROR: {e}")
-                screen_text = "(Hata oluştu)"
-
-        steps.append(f"Screen text (first 500 chars):\n{screen_text}")
-
-        # Check if we're still on Ultron GUI (localhost) — switch away if so
-        if "localhost" in screen_text.lower() or "127.0.0.1" in screen_text.lower() or "517" in screen_text:
-            steps.append("⚠️ Detected Ultron GUI — switching away with alt+tab")
-            import pyautogui
-            import time
-            pyautogui.hotkey('alt', 'tab')
-            time.sleep(1)
-            # Verify switch
-            try:
-                ss2 = await self._screenshot(task)
-                ocr2 = await self._ocr_read(task)
-                screen_text = ocr2.output[:500]
-                steps.append(f"After alt+tab: {screen_text[:200]}")
-            except Exception:
-                pass
+            screen_text = ocr_result.output[:1000]
+        except Exception as e:
+            screen_text = f"OCR failed: {e}"
 
         # Plan actions using LLM
         messages = self._build_messages(

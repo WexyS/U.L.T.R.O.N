@@ -74,35 +74,39 @@ def discover_all_skills() -> list[dict]:
     for search_dir in search_dirs:
         if not search_dir.is_dir():
             continue
-        for item in sorted(search_dir.iterdir()):
-            # Check for SKILL.md in directories
-            if item.is_dir() and not item.name.startswith("."):
-                skill_md = item / "SKILL.md"
-                if skill_md.exists():
-                    try:
-                        content = skill_md.read_text(encoding="utf-8", errors="replace")
-                        desc = content[:200].strip()
-                        skills.append({
-                            "name": item.name,
-                            "description": f"Skill: {item.name}. {desc}",
-                            "path": str(item),
-                            "source": str(search_dir),
-                        })
-                    except Exception as e:
-                        logger.debug("Failed to read skill %s: %s", item.name, e)
-            # Check for .md files directly
-            elif item.is_file() and item.suffix == ".md" and not item.name.startswith("."):
-                try:
-                    content = item.read_text(encoding="utf-8", errors="replace")
-                    desc = content[:200].strip()
-                    skills.append({
-                        "name": item.stem,
-                        "description": f"Skill: {item.stem}. {desc}",
-                        "path": str(item),
-                        "source": str(search_dir),
-                    })
-                except Exception as e:
-                    logger.debug("Failed to read skill file %s: %s", item.name, e)
+        
+        # Use rglob to find all SKILL.md files at any depth
+        for skill_md in search_dir.rglob("SKILL.md"):
+            try:
+                item = skill_md.parent
+                content = skill_md.read_text(encoding="utf-8", errors="replace")
+                # Extract description (first 200 chars or first line)
+                desc = content.split('\n')[0].replace('# Skill:', '').strip() if content.startswith('# Skill:') else content[:200].strip()
+                
+                skills.append({
+                    "name": item.name,
+                    "description": f"Skill: {item.name}. {desc}",
+                    "path": str(item),
+                    "source": str(search_dir),
+                })
+            except Exception as e:
+                logger.debug("Failed to read skill %s: %s", skill_md, e)
+        
+        # Also check for direct .md files (non-recursive for simple files)
+        for item in search_dir.glob("*.md"):
+            if item.name == "SKILL.md" or item.name.startswith("."):
+                continue
+            try:
+                content = item.read_text(encoding="utf-8", errors="replace")
+                desc = content[:200].strip()
+                skills.append({
+                    "name": item.stem,
+                    "description": f"Skill: {item.stem}. {desc}",
+                    "path": str(item),
+                    "source": str(search_dir),
+                })
+            except Exception as e:
+                logger.debug("Failed to read skill file %s: %s", item.name, e)
 
     manifest = (os.environ.get("ULTRON_SKILLS_MANIFEST") or "").strip()
     if manifest:

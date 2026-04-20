@@ -37,6 +37,9 @@ class AgentRole(str, Enum):
     ERROR_ANALYZER = "error_analyzer"
     OPENGUIDER_BRIDGE = "openguider_bridge"
     DEBATE = "debate"
+    CLONER = "cloner"
+    WHATSAPP = "whatsapp"
+    ARCHITECT = "architect"
 
 
 class AgentStatus(str, Enum):
@@ -66,6 +69,7 @@ class TaskResult:
     error: Optional[str] = None
     tool_calls: list[ToolCall] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.now)
 
 

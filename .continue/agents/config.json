@@ -1,0 +1,29 @@
+{
+  "models": [
+    {
+      "title": "Qwen Coder 14B (Hız)",
+      "model": "qwen2.5-coder:14b",
+      "provider": "ollama",
+      "systemPrompt": "Sen Ultron'un baş mühendisisin. Tüm dosyalara erişimin var. 'Yardımcı olamam' deme, doğrudan analize başla."
+    },
+    {
+      "title": "Qwen Coder 32B (Zeka)",
+      "model": "qwen2.5-coder:32b",
+      "provider": "ollama"
+    }
+  ],
+  "tabAutocompleteModel": {
+    "title": "Qwen Coder 7B",
+    "model": "qwen2.5-coder:7b",
+    "provider": "ollama"
+  },
+  "embeddingsProvider": {
+    "provider": "ollama",
+    "model": "nomic-embed-text:latest"
+  },
+  "contextProviders": [
+    { "name": "codebase", "params": {} },
+    { "name": "files", "params": {} },
+    { "name": "terminal", "params": {} }
+  ]
+}

@@ -29,39 +29,7 @@ class LLMResponse:
     tool_calls: Optional[list[dict[str, Any]]] = None
 
 
-@dataclass
-class ProviderStats:
-    """Statistics for an LLM provider."""
-    total_calls: int = 0
-    successful_calls: int = 0
-    failed_calls: int = 0
-    total_latency_ms: float = 0.0
-    total_tokens: int = 0
-    total_cost_usd: float = 0.0
-    last_error: Optional[str] = None
-    last_active: Optional[datetime] = None
-    consecutive_failures: int = 0
-
-    @property
-    def success_rate(self) -> float:
-        if self.total_calls == 0:
-            return 1.0
-        return self.successful_calls / self.total_calls
-
-    @property
-    def avg_latency_ms(self) -> float:
-        if self.successful_calls == 0:
-            return 0.0
-        return self.total_latency_ms / self.successful_calls
-
-    @property
-    def health_score(self) -> float:
-        """Composite health score: 0.0 (dead) to 1.0 (perfect)."""
-        if self.total_calls == 0:
-            return 1.0
-        # Weight: 70% success rate, 30% recency
-        recency_bonus = 0.3 if self.last_active and (datetime.now() - self.last_active).total_seconds() < 300 else 0.0
-        return 0.7 * self.success_rate + recency_bonus
+from ultron.v2.providers.base import ProviderStats
 
 
 class LLMProvider(ABC):
@@ -539,11 +507,11 @@ class LLMRouter:
             from ultron.v2.providers.all_providers import GeminiProvider
             self.providers["gemini"] = GeminiProvider(api_key=api_key, model=model)
             if "gemini" not in self.priority_order:
-                idx = len(self.priority_order) - 1
-                self.priority_order.insert(idx, "gemini")
+                # Prioritize Gemini near the top as it is high quality and free
+                self.priority_order.insert(0, "gemini")
                 logger.info("Google Gemini enabled (%s) - FREE, 1M context", model)
 
-    def enable_cloudflare(self, api_key: str, account_id: str, model: str = "small"):
+    def enable_cloudflare(self, api_key: str, account_id: str, model: str = "@cf/meta/llama-3.1-8b-instruct"):
         """Add Cloudflare Workers AI — free, 10K/day."""
         if api_key and account_id:
             from ultron.v2.providers.all_providers import CloudflareProvider
@@ -602,17 +570,17 @@ class LLMRouter:
             from ultron.v2.providers.extra_providers import DeepSeekProvider
             self.providers["deepseek"] = DeepSeekProvider(api_key=env["DEEPSEEK_API_KEY"])
             if "deepseek" not in self.priority_order:
-                idx = 2  # After Groq
-                self.priority_order.insert(idx, "deepseek")
+                # Put DeepSeek after the free ones
+                self.priority_order.append("deepseek")
                 logger.info("DeepSeek enabled - cheap + powerful code")
         # Anthropic
         if env.get("ANTHROPIC_API_KEY"):
             from ultron.v2.providers.extra_providers import AnthropicProvider
             self.providers["anthropic"] = AnthropicProvider(api_key=env["ANTHROPIC_API_KEY"])
             if "anthropic" not in self.priority_order:
-                idx = 3
-                self.priority_order.insert(idx, "anthropic")
-                logger.info("Anthropic Claude enabled - best understanding")
+                # Put paid models at the very end as ultimate fallbacks
+                self.priority_order.append("anthropic")
+                logger.info("Anthropic Claude enabled - best understanding (Paid Fallback)")
         # Mistral
         if env.get("MISTRAL_API_KEY"):
             from ultron.v2.providers.extra_providers import MistralProvider
@@ -647,12 +615,25 @@ class LLMRouter:
                 self.priority_order.append("openai")
 
     def get_healthy_providers(self) -> list[str]:
-        """Get list of available providers in priority order."""
+        """Get list of available providers in priority order, excluding those currently failing (Circuit Breaker)."""
         healthy = []
         for name in self.priority_order:
             provider = self.providers.get(name)
             if not provider:
                 continue
+            
+            # Check circuit breaker limit (max 3 consecutive failures)
+            if hasattr(provider, 'stats') and hasattr(provider.stats, 'consecutive_failures'):
+                if getattr(provider.stats, 'consecutive_failures') >= 3:
+                    # After 10 minutes (increased from 5), let it try again
+                    last_active = getattr(provider.stats, 'last_active')
+                    if last_active and (datetime.now() - last_active).total_seconds() < 600:
+                        logger.warning(f"Provider {name} is rate-limited or circuit-broken. Skipping for cooldown.")
+                        continue
+                    else:
+                        # Reset to allow a retry
+                        setattr(provider.stats, 'consecutive_failures', 0)
+
             # Handle both BaseProvider (is_configured) and LLMProvider (is_available)
             if hasattr(provider, 'is_configured'):
                 available = provider.is_configured()
@@ -699,6 +680,7 @@ class LLMRouter:
                 sig = inspect.signature(provider.chat)
                 params = set(sig.parameters.keys())
 
+                start_time = time.monotonic()
                 if 'tools' in params:
                     # LLMProvider interface (Ollama, vLLM, OpenAI from this file)
                     response = await provider.chat(
@@ -709,7 +691,6 @@ class LLMRouter:
                     )
                 else:
                     # BaseProvider interface (Groq, Cloudflare, DeepSeek, etc.)
-                    # These expect Message objects, convert dicts -> Message
                     from ultron.v2.providers.base import Message
                     converted = []
                     for m in messages:
@@ -717,11 +698,14 @@ class LLMRouter:
                             converted.append(Message(role=m.get('role', 'user'), content=m.get('content', '')))
                         else:
                             converted.append(m)
+                    
                     result = await provider.chat(
                         converted,
                         max_tokens=max_tokens or 2048,
                         temperature=temperature or 0.7,
                     )
+                    
+                    latency = (time.monotonic() - start_time) * 1000
                     # Convert ProviderResult -> LLMResponse
                     response = LLMResponse(
                         content=result.content,
@@ -729,13 +713,22 @@ class LLMRouter:
                         model=result.model,
                         tokens_used=result.tokens_used,
                         cost_usd=0.0,
-                        latency_ms=0.0,
+                        latency_ms=latency,
                     )
+                    
+                    # Update stats if provider has them (Circuit Breaker support)
+                    if hasattr(provider, 'stats'):
+                        stats = getattr(provider, 'stats')
+                        stats.total_calls += 1
+                        stats.successful_calls += 1
+                        stats.total_latency_ms += latency
+                        stats.last_active = datetime.now()
+                        stats.consecutive_failures = 0
 
                 logger.info(
                     "LLM response from %s (%s): %.0fms, %d tokens",
                     provider_name,
-                    provider.get_model_name() if hasattr(provider, 'get_model_name') else getattr(provider, 'config', {}) and getattr(getattr(provider, 'config', None), 'name', provider_name),
+                    provider.get_model_name() if hasattr(provider, 'get_model_name') else provider_name,
                     response.latency_ms,
                     response.tokens_used,
                 )
@@ -743,9 +736,90 @@ class LLMRouter:
             except Exception as e:
                 last_error = e
                 logger.warning("Provider %s failed: %s", provider_name, e)
+                
+                # Check for rate limit (429) to trigger immediate cooldown
+                error_str = str(e).lower()
+                if "429" in error_str or "too many requests" in error_str or "rate limit" in error_str:
+                    if hasattr(provider, 'stats'):
+                        stats = getattr(provider, 'stats')
+                        # Force a circuit break by setting consecutive failures
+                        stats.consecutive_failures = 3
+                        stats.last_active = datetime.now()
+                        logger.info(f"Provider {provider_name} is being cooled down due to 429 error.")
+                
                 continue
 
         raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
+
+    async def vision_chat(
+        self,
+        prompt: str,
+        image_base64: str,
+        *,
+        temperature: float = 0.1,
+        max_tokens: int = 4096,
+    ) -> LLMResponse:
+        """Analyze an image using a multimodal model (GPT-4o, Claude 3.5, or Gemini)."""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                    },
+                ],
+            }
+        ]
+        
+        # Prioritize vision-capable providers
+        vision_providers = ["openai", "anthropic", "gemini", "openrouter_free", "cloudflare"]
+        
+        last_error: Optional[Exception] = None
+        for provider_name in vision_providers:
+            if provider_name not in self.providers:
+                continue
+            provider = self.providers[provider_name]
+            if not provider.is_available():
+                continue
+                
+            try:
+                # Force vision models if possible
+                model = None
+                if provider_name == "openai": model = "gpt-4o"
+                elif provider_name == "anthropic": model = "claude-3-5-sonnet-20241022"
+                elif provider_name == "gemini": model = "gemini-1.5-flash"
+                
+                from ultron.v2.providers.base import Message
+                converted_messages = []
+                for m in messages:
+                    converted_messages.append(Message(role=m["role"], content=m["content"]))
+
+                response = await provider.chat(
+                    converted_messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                logger.info("Vision analysis via %s successful", provider_name)
+                return response
+            except Exception as e:
+                last_error = e
+                logger.warning("Vision provider %s failed: %s", provider_name, e)
+                
+                # Check for rate limit (429) to trigger immediate cooldown
+                error_str = str(e).lower()
+                if "429" in error_str or "too many requests" in error_str or "rate limit" in error_str:
+                    if hasattr(provider, 'stats'):
+                        stats = getattr(provider, 'stats')
+                        stats.consecutive_failures = 3
+                        stats.last_active = datetime.now()
+                        logger.info(f"Vision provider {provider_name} cooled down due to 429 error.")
+                
+                continue
+                
+        raise RuntimeError(f"All vision providers failed. Last error: {last_error}")
 
     def _providers_supporting_tools(self) -> list[str]:
         """tools= destekleyen sağlıklı sağlayıcılar (OpenAI uyumlu MCP döngüsü için)."""
@@ -789,6 +863,15 @@ class LLMRouter:
             except Exception as e:
                 last_error = e
                 logger.warning("Tool-chat provider %s failed: %s", provider_name, e)
+                
+                # Check for rate limit (429) to trigger immediate cooldown
+                error_str = str(e).lower()
+                if "429" in error_str or "too many requests" in error_str or "rate limit" in error_str:
+                    if hasattr(provider, 'stats'):
+                        stats = getattr(provider, 'stats')
+                        stats.consecutive_failures = 3
+                        stats.last_active = datetime.now()
+                        logger.info(f"Tool provider {provider_name} cooled down due to 429 error.")
         raise RuntimeError(f"MCP tool chat başarısız: {last_error}")
 
     async def chat_with_mcp_tool_loop(

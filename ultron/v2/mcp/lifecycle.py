@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 class MCPClusterManager:
     """Birden fazla MCP sunucusunu AsyncExitStack ile yönetir."""
 
-    def __init__(self, settings: MCPSettings) -> None:
+    def __init__(self, settings: MCPSettings, config_path: Optional[Path] = None) -> None:
         self._settings = settings
+        self._config_path = config_path
         self._stack: Optional[AsyncExitStack] = None
         self._sessions: dict[str, "ClientSession"] = {}
         self._started = False
@@ -102,3 +103,63 @@ class MCPClusterManager:
         self._stack = None
         self._sessions.clear()
         self._started = False
+
+    async def add_server(self, server_def: MCPServerDefinition) -> bool:
+        """Add, start, and persist a new MCP server at runtime."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        import os as _os
+
+        # Avoid duplicates
+        if any(s.id == server_def.id for s in self._settings.servers):
+            logger.warning("MCP server with ID '%s' already exists", server_def.id)
+            return False
+
+        try:
+            # 1. Try to start it
+            if self._stack is None:
+                self._stack = AsyncExitStack()
+
+            env_merged = {str(k): str(v) for k, v in _os.environ.items()}
+            env_merged.update(server_def.env)
+
+            params = StdioServerParameters(
+                command=server_def.command,
+                args=list(server_def.args),
+                env=env_merged,
+                cwd=server_def.cwd,
+            )
+            
+            read_write = await self._stack.enter_async_context(stdio_client(params))
+            read, write = read_write
+            session = await self._stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+            
+            self._sessions[server_def.id] = session
+            self._settings.servers.append(server_def)
+            
+            # 2. Persist to file
+            self.persist_to_file()
+            
+            logger.info("Dinamik MCP sunucu eklendi ve başlatıldı: %s", server_def.id)
+            return True
+        except Exception as e:
+            logger.error("Dinamik MCP sunucu eklenemedi [%s]: %s", server_def.id, e)
+            return False
+
+    def persist_to_file(self) -> None:
+        """Save current MCP settings back to YAML."""
+        if not self._config_path:
+            return
+            
+        import yaml
+        try:
+            # We want to save under the 'mcp' key if that's how it's structured
+            data = {"mcp": self._settings.model_dump(exclude_none=True)}
+            self._config_path.write_text(
+                yaml.dump(data, sort_keys=False, allow_unicode=True),
+                encoding="utf-8"
+            )
+            logger.info("MCP ayarları '%s' dosyasına kaydedildi", self._config_path)
+        except Exception as e:
+            logger.error("MCP ayarları kaydedilemedi: %s", e)

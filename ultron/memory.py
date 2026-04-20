@@ -158,9 +158,11 @@ class ResponseCache:
         """Load cache from disk."""
         if self._persist_path and self._persist_path.exists():
             try:
-                data = json.loads(self._persist_path.read_text(encoding="utf-8"))
-                self._cache = OrderedDict(data.get("cache", {}))
-                logger.info("Loaded %d cached responses", len(self._cache))
+                content = self._persist_path.read_text(encoding="utf-8")
+                if content.strip():
+                    data = json.loads(content)
+                    self._cache = OrderedDict(data.get("cache", {}))
+                    logger.info("Loaded %d cached responses", len(self._cache))
             except Exception as e:
                 logger.warning("Failed to load cache: %s", e)
 
@@ -179,9 +181,14 @@ class UserMemory:
     def __init__(self, persist_dir: str = "./data/memory"):
         self._persist_dir = Path(persist_dir)
         self._persist_dir.mkdir(parents=True, exist_ok=True)
+        self._current_user = "default"
 
         # Semantic memory: structured user facts
         self._semantic = self._load_json("semantic.json")
+
+        # Profiles: individual user profiles
+        self._profiles = self._load_json("profiles.json")
+        if not self._profiles.get("users"): self._profiles["users"] = {}
 
         # Episodic memory: notable events
         self._episodic = self._load_json("episodic.json")
@@ -211,6 +218,28 @@ class UserMemory:
         self._save_json("episodic.json", self._episodic)
         self._save_json("procedural.json", self._procedural)
         self._save_json("summary.json", self._summary)
+        self._save_json("profiles.json", self._profiles)
+
+    def set_user(self, user_name: str) -> None:
+        """Switch current user context."""
+        self._current_user = user_name
+        if user_name not in self._profiles["users"]:
+            self._profiles["users"][user_name] = {
+                "first_seen": datetime.now().isoformat(),
+                "interests": [],
+                "traits": {},
+                "last_active": datetime.now().isoformat()
+            }
+        self._save_all()
+
+    def update_profile(self, user_name: str, key: str, value: Any) -> None:
+        if user_name not in self._profiles["users"]: self.set_user(user_name)
+        self._profiles["users"][user_name][key] = value
+        self._profiles["users"][user_name]["last_active"] = datetime.now().isoformat()
+        self._save_all()
+
+    def get_profile(self, user_name: str) -> dict:
+        return self._profiles["users"].get(user_name, {})
 
     # ─── Semantic Memory (facts about user) ──────────────────────────────
 
@@ -250,13 +279,20 @@ class UserMemory:
     def get_facts_context(self) -> str:
         """Format all facts as context for LLM prompts."""
         facts = self.get_facts()
-        if not facts:
-            return ""
+        profile = self.get_profile(self._current_user)
+        
+        lines = [f"Information about user '{self._current_user}':"]
+        if profile:
+            interests = ", ".join(profile.get("interests", []))
+            if interests:
+                lines.append(f"- Interests: {interests}")
+            for k, v in profile.get("traits", {}).items():
+                lines.append(f"- {k.capitalize()}: {v}")
 
-        lines = ["Known information about the user:"]
-        for f in facts:
-            lines.append(f"- {f['category']}: {f['key']} = {f['value']}")
-        return "\n".join(lines)
+        if facts:
+            for f in facts:
+                lines.append(f"- {f['category']}: {f['key']} = {f['value']}")
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     # ─── Episodic Memory (notable events) ────────────────────────────────
 
@@ -464,13 +500,21 @@ class SelfLearning:
 
         # Detect topic interests
         topics = {
-            "coding": ["python", "javascript", "code", "function", "api", "debug"],
-            "research": ["research", "study", "learn about", "paper", "article"],
-            "productivity": ["schedule", "calendar", "email", "task", "organize"],
+            "coding": ["python", "javascript", "code", "function", "api", "debug", "yazılım", "kod"],
+            "research": ["research", "study", "learn about", "paper", "article", "araştırma", "bilgi"],
+            "productivity": ["schedule", "calendar", "email", "task", "organize", "plan", "ajanda"],
+            "marvel": ["marvel", "ultron", "stark", "avengers", "iron man", "yenilmezler"],
         }
         for topic, keywords in topics.items():
             if any(kw in user_lower for kw in keywords):
-                # Track topic interest count
+                # Update profile interests
+                profile = self.user_memory.get_profile(self.user_memory._current_user)
+                interests = profile.get("interests", [])
+                if topic not in interests:
+                    interests.append(topic)
+                    self.user_memory.update_profile(self.user_memory._current_user, "interests", interests)
+                
+                # Also track as fact
                 existing = self.user_memory.get_facts("interests")
                 for item in existing:
                     if item.get("key") == topic:
@@ -478,6 +522,17 @@ class SelfLearning:
                         self.user_memory.add_fact("interests", topic, str(count))
                         return
                 self.user_memory.add_fact("interests", topic, "1")
+
+        # Detect User Name
+        name_patterns = [r"benim adım ([\w\s]+)", r"ismin ([\w\s]+)", r"bana ([\w\s]+) de", r"i am ([\w\s]+)", r"call me ([\w\s]+)"]
+        for pattern in name_patterns:
+            match = re.search(pattern, user_lower)
+            if match:
+                name = match.group(1).strip()
+                if len(name) < 20:
+                    self.user_memory.set_user(name)
+                    self.user_memory.add_fact("identity", "name", name)
+                    logger.info("IDENTITY RECOGNIZED: User is %s", name)
 
     async def finalize(self) -> None:
         """Process any remaining pending conversations."""

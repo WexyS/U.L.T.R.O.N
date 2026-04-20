@@ -1,55 +1,59 @@
 @echo off
 setlocal enabledelayedexpansion
-title Ultron v2.0 — Web GUI Launcher
+title Ultron AGI — Unified Master Launcher
 color 0B
+
 echo.
 echo ============================================================
-echo  Ultron v2.0 — Web GUI (React + FastAPI)
-echo  Backend : http://127.0.0.1:8000
-echo  Frontend: http://localhost:5173
+echo   ULTRON AGI v2.2 - MASTER UNIFIED LAUNCHER
 echo ============================================================
 echo.
 
 cd /d "%~dp0"
 
-:: [1/4] Sanal ortam
-if exist "%~dp0.venv\Scripts\activate.bat" (
-    call "%~dp0.venv\Scripts\activate.bat"
-    echo [1/4] Virtual environment activated.
+:: [1/4] Activate Environment
+if exist ".venv\Scripts\activate.bat" (
+    call ".venv\Scripts\activate.bat"
+    echo [+] Sanal ortam aktif edildi.
 ) else (
-    echo [-] .venv bulunamadi. Once: python -m venv .venv
+    echo [-] HATA: .venv bulunamadı!
     pause & exit /b 1
 )
 
-:: [2/4] Backend baslat
-:: BUG #1 DUZELTME: eksik kapanış tırnak eklendi
-:: BUG #2 DUZELTME: --host 0.0.0.0 -> 127.0.0.1 (guvenlik)
-:: BUG #4 DUZELTME: python -> .venv\Scripts\python.exe (PATH sorunu)
-echo [2/4] Starting FastAPI Backend (port 8000)...
-start "Ultron Backend" cmd /k "cd /d %~dp0 && call .venv\Scripts\activate.bat && .venv\Scripts\python.exe -m uvicorn ultron.api.main:app --host 127.0.0.1 --port 8000"
+:: [2/4] Start Backend (Optimized)
+echo [+] Backend (Port 8000) baslatiliyor...
+start "Ultron Backend" /min cmd /k "python -m uvicorn ultron.api.main:app --host 0.0.0.0 --port 8000 --no-access-log --workers 1"
 
-:: [3/4] Health check
-:: BUG #3 DUZELTME: kör timeout -> curl dongusu (race condition)
-echo [3/4] Waiting for backend...
+:: [3/4] Wait for Backend
+echo [+] Backend bekleniyor...
 set RETRY=0
 :HEALTH_LOOP
-    timeout /t 2 /nobreak >nul
+    timeout /t 1 /nobreak >nul
     curl -sf http://127.0.0.1:8000/health >nul 2>&1
     if !errorlevel! equ 0 goto BACKEND_OK
     set /a RETRY+=1
-    echo     Bekleniyor... (!RETRY!/30)
-    if !RETRY! lss 30 goto HEALTH_LOOP
-    echo [-] Backend 60 saniyede baslamadi. Ultron Backend penceresini kontrol et.
+    if !RETRY! lss 20 goto HEALTH_LOOP
+    echo [-] HATA: Backend baslamadi!
     pause & exit /b 1
 :BACKEND_OK
-echo     Backend hazir.
+echo [OK] Backend hazir.
+
+:: [4/4] Start Voice & Frontend
+echo [+] Sesli asistan ve Arayuz baslatiliyor...
+start "Ultron Voice" /min cmd /c "python -m ultron.voice_app"
+cd ultron-desktop
+start /b cmd /c "npm run dev"
+
+echo.
+echo ============================================================
+echo   ULTRON AGI SISTEMI AKTIF! ✨🚀
+echo   Dashboard: http://localhost:5173
+echo ============================================================
 echo.
 
-:: [4/4] Frontend
-echo [4/4] Starting React Frontend (port 5173)...
-cd /d "%~dp0ultron-desktop"
-call npm run dev
+:: Open Dashboard
+timeout /t 2 >nul
+start http://localhost:5173
 
-echo.
-echo [-] Frontend durdu.
-pause
+:: Keep alive
+pause >nul

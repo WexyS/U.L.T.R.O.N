@@ -228,74 +228,57 @@ export default function StreamingMessage({ content, isStreaming = false }: Strea
       }
 
       return (
-        <code className={className} style={{
-          backgroundColor: 'rgb(var(--color-panel))',
-          padding: '0.2em 0.4em',
-          borderRadius: '0.25rem',
-          fontSize: '0.875em',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-        }} {...props}>
+        <code className="px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 font-mono text-sm" {...props}>
           {children}
         </code>
       );
     },
     pre: ({ children }: React.HTMLAttributes<HTMLPreElement>) => <>{children}</>,
     h1: ({ children }: React.HTMLAttributes<HTMLHeadingElement>) => (
-      <h1 className="text-2xl font-bold mt-6 mb-3" style={{ color: 'rgb(var(--color-text))' }}>{children}</h1>
+      <h1 className="text-2xl font-bold mt-8 mb-4 text-zinc-900 dark:text-zinc-50 tracking-tight">{children}</h1>
     ),
     h2: ({ children }: React.HTMLAttributes<HTMLHeadingElement>) => (
-      <h2 className="text-xl font-bold mt-5 mb-2" style={{ color: 'rgb(var(--color-text))' }}>{children}</h2>
+      <h2 className="text-xl font-bold mt-6 mb-3 text-zinc-900 dark:text-zinc-50 tracking-tight">{children}</h2>
     ),
     h3: ({ children }: React.HTMLAttributes<HTMLHeadingElement>) => (
-      <h3 className="text-lg font-bold mt-4 mb-2" style={{ color: 'rgb(var(--color-text))' }}>{children}</h3>
+      <h3 className="text-lg font-bold mt-5 mb-2 text-zinc-900 dark:text-zinc-50 tracking-tight">{children}</h3>
     ),
     p: ({ children }: React.HTMLAttributes<HTMLParagraphElement>) => (
-      <p className="mb-3 leading-relaxed" style={{ color: 'rgb(var(--color-text))' }}>{children}</p>
+      <p className="mb-4 leading-relaxed text-zinc-700 dark:text-zinc-300">{children}</p>
     ),
     ul: ({ children }: React.HTMLAttributes<HTMLUListElement>) => (
-      <ul className="list-disc pl-6 mb-3 space-y-1" style={{ color: 'rgb(var(--color-text))' }}>{children}</ul>
+      <ul className="list-disc pl-6 mb-4 space-y-2 text-zinc-700 dark:text-zinc-300">{children}</ul>
     ),
     ol: ({ children }: React.HTMLAttributes<HTMLOListElement>) => (
-      <ol className="list-decimal pl-6 mb-3 space-y-1" style={{ color: 'rgb(var(--color-text))' }}>{children}</ol>
+      <ol className="list-decimal pl-6 mb-4 space-y-2 text-zinc-700 dark:text-zinc-300">{children}</ol>
     ),
     li: ({ children }: React.HTMLAttributes<HTMLLIElement>) => (
-      <li className="mb-1" style={{ color: 'rgb(var(--color-text))' }}>{children}</li>
+      <li className="mb-1 leading-relaxed">{children}</li>
     ),
     blockquote: ({ children }: React.HTMLAttributes<HTMLQuoteElement>) => (
-      <blockquote className="border-l-4 pl-4 py-2 my-3 italic" style={{
-        borderColor: 'rgb(var(--color-accent))',
-        color: 'rgb(var(--color-text-secondary))',
-        backgroundColor: 'rgb(var(--color-panel))'
-      }}>
+      <blockquote className="border-l-4 border-indigo-500 pl-4 py-1 my-4 italic text-zinc-600 dark:text-zinc-400 bg-zinc-50/50 dark:bg-zinc-900/50 rounded-r-lg">
         {children}
       </blockquote>
     ),
     table: ({ children }: React.HTMLAttributes<HTMLTableElement>) => (
-      <div className="overflow-x-auto my-4">
-        <table className="min-w-full border-collapse border" style={{ borderColor: 'rgb(var(--color-border))' }}>
+      <div className="overflow-x-auto my-6 rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table className="min-w-full border-collapse">
           {children}
         </table>
       </div>
     ),
     th: ({ children }: React.HTMLAttributes<HTMLTableCellElement>) => (
-      <th className="border px-3 py-2 font-semibold" style={{
-        backgroundColor: 'rgb(var(--color-panel))',
-        borderColor: 'rgb(var(--color-border))',
-        color: 'rgb(var(--color-text))'
-      }}>
+      <th className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-800 text-left font-semibold text-zinc-900 dark:text-zinc-100">
         {children}
       </th>
     ),
     td: ({ children }: React.HTMLAttributes<HTMLTableCellElement>) => (
-      <td className="border px-3 py-2" style={{
-        borderColor: 'rgb(var(--color-border))',
-        color: 'rgb(var(--color-text))'
-      }}>
+      <td className="px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300">
         {children}
       </td>
     ),
     a: ({ href, children }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-      <a href={href} className="underline hover:opacity-80" style={{ color: 'rgb(var(--color-accent))' }} target="_blank" rel="noopener noreferrer">
+      <a href={href} className="text-indigo-600 dark:text-indigo-400 font-medium underline underline-offset-4 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors" target="_blank" rel="noopener noreferrer">
         {children}
       </a>
     ),

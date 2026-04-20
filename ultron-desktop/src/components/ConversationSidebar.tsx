@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, Search, Trash2, Edit2, Check, X, 
-  MessageSquare, Clock, Calendar, MoreVertical 
+  MessageSquare, Clock, Calendar, MoreVertical, AlertTriangle 
 } from 'lucide-react';
 
 export interface Conversation {
@@ -22,6 +22,7 @@ interface ConversationSidebarProps {
   onNewConversation: () => void;
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, newTitle: string) => void;
+  onClearAllConversations?: () => void;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -33,6 +34,7 @@ export default function ConversationSidebar({
   onNewConversation,
   onDeleteConversation,
   onRenameConversation,
+  onClearAllConversations,
   isOpen,
   onClose
 }: ConversationSidebarProps) {
@@ -40,6 +42,7 @@ export default function ConversationSidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [showMenuId, setShowMenuId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   // Filter conversations by search query
   const filteredConversations = conversations.filter(conv =>
@@ -302,18 +305,59 @@ export default function ConversationSidebar({
               )}
             </div>
 
-            {/* Footer Stats */}
+            {/* Footer Stats & Clear All */}
             <div className="p-4 border-t text-xs" style={{ 
               borderColor: 'rgb(var(--color-border))',
               color: 'rgb(var(--color-text-muted))'
             }}>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-2">
                 <span>{conversations.length} conversations</span>
                 <div className="flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
                   <span>Today</span>
                 </div>
               </div>
+              {conversations.length > 0 && onClearAllConversations && (
+                <AnimatePresence mode="wait">
+                  {confirmClearAll ? (
+                    <motion.div
+                      key="confirm"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="flex items-center gap-2"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                      <span className="text-red-500 text-xs">Tümü silinsin mi?</span>
+                      <button
+                        onClick={() => { onClearAllConversations(); setConfirmClearAll(false); }}
+                        className="px-2 py-1 rounded text-xs font-medium bg-red-500 text-white hover:bg-red-600 transition-colors"
+                      >
+                        Evet
+                      </button>
+                      <button
+                        onClick={() => setConfirmClearAll(false)}
+                        className="px-2 py-1 rounded text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        style={{ color: 'rgb(var(--color-text))' }}
+                      >
+                        İptal
+                      </button>
+                    </motion.div>
+                  ) : (
+                    <motion.button
+                      key="trigger"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setConfirmClearAll(true)}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800/40 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Tüm Konuşmaları Temizle
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              )}
             </div>
           </motion.div>
         </>

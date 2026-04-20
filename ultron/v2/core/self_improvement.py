@@ -302,8 +302,26 @@ class SelfImprovementEngine:
                     existing_names = {s.name for s in self._skills}
                     if skill.name not in existing_names:
                         self._skills.append(skill)
+                        
+                        # PERSIST TO DISK: Create a permanent SKILL.md for Ultron to discover
+                        try:
+                            skill_dir = Path("./skills/learned") / skill.name
+                            skill_dir.mkdir(parents=True, exist_ok=True)
+                            skill_md = skill_dir / "SKILL.md"
+                            
+                            md_content = (
+                                f"# Skill: {skill.name}\n\n"
+                                f"## Description\n{skill.description}\n\n"
+                                f"## Trigger Pattern\n{skill.trigger_pattern}\n\n"
+                                f"## Execution Template\n{skill.execution_template}\n\n"
+                                f"--- \n*Generated autonomously by Ultron Self-Improvement Engine on {datetime.now().strftime('%Y-%m-%d')}*"
+                            )
+                            skill_md.write_text(md_content, encoding="utf-8")
+                            logger.info("New skill PERMANENTLY saved to disk: %s", skill.name)
+                        except Exception as e:
+                            logger.error("Failed to persist learned skill %s: %s", skill.name, e)
+
                         new_skills.append(skill)
-                        logger.info("New skill generated: %s — %s", skill.name, skill.description)
 
                 return new_skills
         except Exception as e:

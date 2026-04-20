@@ -45,7 +45,32 @@ class AnthropicProvider(BaseProvider):
             if msg.role == "system":
                 system_msg = msg.content
             else:
-                chat_msgs.append({"role": msg.role, "content": msg.content})
+                content = msg.content
+                if isinstance(content, list):
+                    # Handle multimodal content (Vision)
+                    formatted_content = []
+                    for item in content:
+                        if item.get("type") == "text":
+                            formatted_content.append({"type": "text", "text": item["text"]})
+                        elif item.get("type") == "image_url":
+                            url = item["image_url"]["url"]
+                            if url.startswith("data:"):
+                                # Extract base64 and media type
+                                import re
+                                match = re.match(r"data:(image\/\w+);base64,(.+)", url)
+                                if match:
+                                    media_type, data = match.groups()
+                                    formatted_content.append({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": media_type,
+                                            "data": data
+                                        }
+                                    })
+                    chat_msgs.append({"role": msg.role, "content": formatted_content})
+                else:
+                    chat_msgs.append({"role": msg.role, "content": content})
 
         async with httpx.AsyncClient(timeout=self.config.timeout) as c:
             r = await c.post(

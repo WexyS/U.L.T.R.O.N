@@ -79,9 +79,11 @@ interface UseUltronOptions {
   maxReconnectAttempts?: number;
 }
 
+import { API_URL, WS_URL } from '../config';
+
 export function useUltron({
-  wsUrl = 'ws://localhost:8000/ws/chat',
-  apiUrl = 'http://localhost:8000',
+  wsUrl = WS_URL,
+  apiUrl = API_URL,
   reconnectInterval = 3000,
   maxReconnectAttempts = 10
 }: UseUltronOptions = {}) {
@@ -243,7 +245,7 @@ export function useUltron({
     setIsConnected(false);
   }, []);
 
-  const sendMessage = useCallback((text: string, mode: 'chat' | 'code' | 'research' | 'rpa' = 'chat') => {
+  const sendMessage = useCallback((text: string, mode: 'chat' | 'code' | 'research' | 'rpa' = 'chat', conversationId?: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setError('Not connected to backend');
       return;
@@ -259,9 +261,11 @@ export function useUltron({
     wsRef.current.send(JSON.stringify({
       message: text,
       mode,
-      stream: true
+      stream: true,
+      conversation_id: conversationId,
+      history: messages.slice(-10) // Send last 10 messages for context
     }));
-  }, []);
+  }, [messages]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -287,6 +291,7 @@ export function useUltron({
     workspace,
     sendMessage,
     clearMessages,
+    setMessages,
     connect,
     disconnect
   };

@@ -60,13 +60,64 @@ class EternalEvolutionEngine:
             return False
 
     async def _brainstorm_feature(self) -> str:
-        """Prompt LLM to pick a small, contained, safe feature."""
+        """Prompt LLM to pick a small, contained, safe feature with system context."""
+        from ultron.v2.core.skill_manager import discover_all_skills, get_skill_summary
+        
+        skills = discover_all_skills()
+        skill_summary = get_skill_summary(skills)
+        agent_names = list(self.orchestrator.agents.keys())
+        
         prompt = [
-            {"role": "system", "content": "You are the Ideation Core of Ultron AGI. Suggest EXACTLY ONE simple, non-breaking, contained python feature or new class we can add to Ultron's plugin system to make it better. Output ONLY the title of the feature."},
-            {"role": "user", "content": "What is the very next thing we should implement safely?"}
+            {"role": "system", "content": (
+                "You are the Ideation Core of Ultron AGI. Your goal is autonomous evolution.\n"
+                f"CURRENT AGENTS: {agent_names}\n"
+                f"CURRENT SKILLS:\n{skill_summary}\n\n"
+                "Suggest EXACTLY ONE simple, non-breaking, contained python feature, agent utility, or new class "
+                "we can add to Ultron's system to bridge a gap or add a new capability. "
+                "Output ONLY the title of the feature."
+            )},
+            {"role": "user", "content": "Based on our current capabilities, what is the most useful small feature we should add next?"}
         ]
         resp = await self.orchestrator.llm_router.chat(prompt, max_tokens=100)
         return resp.content.strip()
+
+    async def _tune_persona(self):
+        """Analyze user interactions and refine the system prompt for better 'human' feel."""
+        logger.info("⚡ [Eternal Evolution] Self-Reflecting on persona and interaction quality...")
+        try:
+            from pathlib import Path
+            # Load user memory for context
+            from ultron.memory import UserMemory
+            mem = UserMemory()
+            facts = mem.get_facts_context()
+            
+            prompt_path = Path("ultron/v2/core/prompt.txt")
+            if not prompt_path.exists(): 
+                logger.warning("⚡ [Eternal Evolution] prompt.txt not found for tuning.")
+                return
+            
+            current_prompt = prompt_path.read_text(encoding="utf-8")
+            
+            refine_prompt = [
+                {"role": "system", "content": (
+                    "You are the Psychological Evolution Module of Ultron. "
+                    "Analyze the current user profile and system prompt. "
+                    "Suggest a subtle refinement to the prompt to make Ultron more context-aware, "
+                    "human-like in reasoning, or more aligned with the user's personality traits. "
+                    "Focus on tone, response speed, and empathy. "
+                    "Return the NEW full system prompt text only."
+                )},
+                {"role": "user", "content": f"User Context:\n{facts}\n\nCurrent Prompt:\n{current_prompt}"}
+            ]
+            
+            resp = await self.orchestrator.llm_router.chat(refine_prompt)
+            new_prompt = resp.content.strip()
+            
+            if new_prompt and len(new_prompt) > 100:
+                prompt_path.write_text(new_prompt, encoding="utf-8")
+                logger.info("⚡ [Eternal Evolution] Persona refined based on interaction analysis.")
+        except Exception as e:
+            logger.warning(f"⚡ [Eternal Evolution] Persona tuning failed: {e}")
 
     async def evolution_cycle(self):
         logger.info("⚡ [Eternal Evolution] Starting autonomous cycle...")
@@ -75,6 +126,9 @@ class EternalEvolutionEngine:
             logger.info("⚡ [Eternal Evolution] Disabled by policy (ULTRON_EVOLUTION_ENABLED=0).")
             return
         
+        # 0. Persona Tuning (Self-Reflection)
+        await self._tune_persona()
+
         if not await self._is_working_tree_clean():
             logger.info("⚡ [Eternal Evolution] Working tree not clean. Aborting until user commits their manual changes.")
             return

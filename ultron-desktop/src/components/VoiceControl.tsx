@@ -30,12 +30,28 @@ export default function VoiceControl({
   const [recognition, setRecognition] = useState<any>(null);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const langRef = useRef(language);
 
   // Keep language ref in sync
   useEffect(() => {
     langRef.current = language;
   }, [language]);
+
+  // Track online/offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => {
+      setIsOnline(false);
+      setError('İnternet bağlantısı kesildi. Ses tanıma çevrimdışı çalışmaz.');
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -73,19 +89,30 @@ export default function VoiceControl({
           console.error('Speech recognition error:', event.error);
           
           const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
-          const networkErrorMsg = isTauri 
-            ? 'Desktop App (WebView2) does not support native Voice Recognition. Please open Ultron UI in Google Chrome.'
-            : 'Speech recognition requires an internet connection. Please check your network and try again.';
 
           // Provide user-friendly error messages
           const errorMessages: Record<string, string> = {
-            'not-allowed': 'Microphone access denied. Please allow microphone permission in your browser settings.',
-            'network': networkErrorMsg,
-            'no-speech': 'No speech detected. Please try again and speak clearly.',
-            'audio-capture': 'No microphone found. Please ensure a microphone is connected.',
-            'language-not-recognized': `Language ${language} may not be supported. Try switching to English.`,
+            'not-allowed': 'Mikrofon erişimi reddedildi. Lütfen tarayıcı ayarlarından mikrofon iznini verin.',
+            'network': isTauri 
+              ? 'Desktop App (WebView2) ses tanımayı desteklemiyor. Lütfen Ultron UI\'ı Google Chrome\'da açın.'
+              : 'Ses tanıma için internet bağlantısı gerekli. Bağlantınızı kontrol edip tekrar deneyin.',
+            'no-speech': 'Ses algılanamadı. Tekrar deneyin ve net konuşun.',
+            'audio-capture': 'Mikrofon bulunamadı. Lütfen bir mikrofon bağlı olduğundan emin olun.',
+            'aborted': 'Ses tanıma durduruldu.',
+            'language-not-recognized': `${language} dili desteklenmiyor olabilir. İngilizce'ye geçmeyi deneyin.`,
           };
-          setError(errorMessages[event.error] || `Error: ${event.error}`);
+          setError(errorMessages[event.error] || `Hata: ${event.error}`);
+
+          // Auto-retry on transient network errors (max 1 retry)
+          if (event.error === 'network' && !isTauri && navigator.onLine) {
+            setTimeout(() => {
+              try {
+                recognitionInstance.lang = langRef.current;
+                recognitionInstance.start();
+                setError(null);
+              } catch { /* ignore retry failure */ }
+            }, 2000);
+          }
         };
 
         recognitionInstance.onend = () => {
@@ -94,7 +121,7 @@ export default function VoiceControl({
 
         setRecognition(recognitionInstance);
       } else {
-        setError('Speech recognition not supported. Try Chrome or Edge browser.');
+        setError('Ses tanıma desteklenmiyor. Chrome veya Edge tarayıcısını deneyin.');
       }
     }
   }, [onVoiceInput, language]);
@@ -107,6 +134,11 @@ export default function VoiceControl({
       recognition.stop();
     } else {
       setError(null);
+      // Check online status before starting
+      if (!navigator.onLine) {
+        setError('Çevrimdışısınız. Ses tanıma internet bağlantısı gerektirir.');
+        return;
+      }
       // Update language before starting
       recognition.lang = langRef.current;
       try {

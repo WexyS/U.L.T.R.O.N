@@ -36,10 +36,21 @@ async def chat_ws(ws: WebSocket):
 
             message = data.get("message", "").strip()
             mode = data.get("mode", "chat")
+            history = data.get("history", [])
+            conversation_id = data.get("conversation_id")
 
             if not message:
                 await ws_manager.send_json(conn_id, {"type": "error", "content": "Empty message"})
                 continue
+
+            # Persistence: Save user message
+            from ultron.v2.memory.conversation_store import ConversationStore
+            store = ConversationStore()
+            if conversation_id:
+                try:
+                    store.add_message(conversation_id, "user", message)
+                except Exception as e:
+                    logger.warning("[%s] Failed to save user message: %s", conn_id, e)
 
             # Validate message length
             if len(message) > 10000:
@@ -64,12 +75,24 @@ async def chat_ws(ws: WebSocket):
                     elif mode == "rpa":
                         ctx = {"intent": {"type": "rpa", "subtasks": [message]}}
 
+                    if ctx is None:
+                        ctx = {}
+                    ctx["history"] = history
+                    ctx["conversation_id"] = conversation_id
+
                     result = await orch.process(message, context=ctx)
+
+                    # Persistence: Save assistant response
+                    if conversation_id:
+                        try:
+                            store.add_message(conversation_id, "assistant", result)
+                        except Exception as e:
+                            logger.warning("[%s] Failed to save assistant message: %s", conn_id, e)
 
                     await ws_manager.send_json(conn_id, {
                         "type": "token",
                         "content": result,
-                        "metadata": {"task_id": task_id, "mode": mode}
+                        "metadata": {"task_id": task_id, "mode": mode, "conversation_id": conversation_id}
                     })
 
                     await ws_manager.send_json(conn_id, {

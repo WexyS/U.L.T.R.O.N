@@ -11,15 +11,22 @@ class DebateEngine:
     def __init__(self, llm_router: LLMRouter):
         self.llm_router = llm_router
 
-    async def run_debate(self, topic: str, rounds: int = 2) -> Dict[str, Any]:
-        """Runs a debate between an Advocate, a Critic, and a Judge."""
+    async def run_debate(self, topic: str, rounds: int = 2, mode: str = "standard") -> Dict[str, Any]:
+        """Runs a debate between an Advocate, a Critic, and a Judge.
+        Modes: standard, security_audit
+        """
         
-        advocate_prompt = "Sen 'Savunucu' (Advocate) adlı yapay zekasın. Kullanıcının sorusuna detaylı, inandırıcı ve çözüm odaklı bir yanıt ver. " \
-                          "Eğer eleştiri gelirse kendini savun veya puanlarını geliştir. SADECE TÜRKÇE YANIT VER."
-        critic_prompt = "Sen 'Eleştirmen' (Critic) adlı yapay zekasın. Savunucu'nun argümanını incele. Olası hataları, halüsinasyonları, " \
-                        "güvenlik açıklarını veya eksikleri bul. Yapıcı bir dille eleştir. SADECE TÜRKÇE YANIT VER."
-        judge_prompt = "Sen 'Yargıç' (Judge) adlı yapay zekasın. Konuyu, Savunucu'nun ve Eleştirmen'in argümanlarını değerlendir. " \
-                       "En doğru, güvenli ve tutarlı nihai kararı sentezleyip ortaya çıkar. SADECE NİHAİ KARARI VE SEBEBİNİ TÜRKÇE OLARAK YAZ."
+        if mode == "security_audit":
+            advocate_prompt = "Sen 'Güvenlik Savunucusu'sun. Önerilen kodun veya özelliğin neden güvenli olduğunu ve en iyi uygulamalara uyduğunu açıkla. SADECE TÜRKÇE YANIT VER."
+            critic_prompt = "Sen 'Siber Güvenlik Denetçisi'sin (Pen-tester). Önerideki güvenlik açıklarını, enjeksiyon risklerini ve zafiyetleri bul. Acımasız ama yapıcı ol. SADECE TÜRKÇE YANIT VER."
+            judge_prompt = "Sen 'Güvenlik Yöneticisi'sin (CISO). Tartışmayı değerlendir ve bu değişikliğin canlıya alınması için %100 güvenli olup olmadığına karar ver. SADECE NİHAİ KARARI TÜRKÇE YAZ."
+        else:
+            advocate_prompt = "Sen 'Savunucu' (Advocate) adlı yapay zekasın. Kullanıcının sorusuna detaylı, inandırıcı ve çözüm odaklı bir yanıt ver. " \
+                              "Eğer eleştiri gelirse kendini savun veya puanlarını geliştir. SADECE TÜRKÇE YANIT VER."
+            critic_prompt = "Sen 'Eleştirmen' (Critic) adlı yapay zekasın. Savunucu'nun argümanını incele. Olası hataları, halüsinasyonları, " \
+                            "güvenlik açıklarını veya eksikleri bul. Yapıcı bir dille eleştir. SADECE TÜRKÇE YANIT VER."
+            judge_prompt = "Sen 'Yargıç' (Judge) adlı yapay zekasın. Konuyu, Savunucu'nun ve Eleştirmen'in argümanlarını değerlendir. " \
+                           "En doğru, güvenli ve tutarlı nihai kararı sentezleyip ortaya çıkar. SADECE NİHAİ KARARI VE SEBEBİNİ TÜRKÇE OLARAK YAZ."
 
         # Keep a general transcript
         transcript = []

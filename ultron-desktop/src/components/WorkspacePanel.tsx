@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Globe, Code, Layers, Loader2, CheckCircle, AlertCircle, FolderOpen, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_URL } from '../config';
 
 interface WorkspaceItem {
   id: string;
@@ -33,7 +34,7 @@ export default function WorkspacePanel() {
 
   const loadWorkspace = async () => {
     try {
-      const resp = await fetch('http://localhost:8000/api/v2/workspace/list');
+      const resp = await fetch(`${API_URL}/api/v2/workspace/list`);
       const data = await resp.json();
       setWorkspace(data.items || []);
     } catch (err) {
@@ -49,7 +50,7 @@ export default function WorkspacePanel() {
     setResult(null);
 
     try {
-      const resp = await fetch('http://localhost:8000/api/v2/workspace/clone', {
+      const resp = await fetch(`${API_URL}/api/v2/workspace/clone`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -82,7 +83,7 @@ export default function WorkspacePanel() {
     setResult(null);
 
     try {
-      const resp = await fetch('http://localhost:8000/api/v2/workspace/generate', {
+      const resp = await fetch(`${API_URL}/api/v2/workspace/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -115,7 +116,7 @@ export default function WorkspacePanel() {
     setResult(null);
 
     try {
-      const resp = await fetch('http://localhost:8000/api/v2/workspace/synthesize', {
+      const resp = await fetch(`${API_URL}/api/v2/workspace/synthesize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -142,7 +143,7 @@ export default function WorkspacePanel() {
 
   const openInExplorer = (path: string) => {
     // Open folder in file explorer
-    fetch('http://localhost:8000/api/v2/workspace/open-folder', {
+    fetch(`${API_URL}/api/v2/workspace/open-folder`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path }),

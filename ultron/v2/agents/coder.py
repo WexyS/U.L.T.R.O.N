@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -48,14 +49,13 @@ class CoderAgent(Agent):
 
     def _default_system_prompt(self) -> str:
         return (
-            "You are a code generation engine. You output ONLY raw, executable Python code.\n"
+            "You are an Elite Software Architect and Senior Engineer.\n"
+            "You can generate single files or complete project structures.\n"
             "RULES:\n"
-            "- Output ONLY Python source code. Nothing else.\n"
-            "- NO explanations, NO markdown, NO JSON, NO text before or after.\n"
-            "- NO 'Here is the code', NO 'Please run this', NO 'Make sure you have'.\n"
-            "- Just the pure Python code that solves the task.\n"
-            "- Include print statements so output is visible.\n"
-            "- If you cannot write code, output a minimal working example.\n"
+            "- If building a project, provide the structure first, then the code for each file.\n"
+            "- Output ONLY code or structured project data.\n"
+            "- When in ARCHITECT mode, you can use advanced system commands for building and testing.\n"
+            "- Include print statements or logging for visibility.\n"
         )
 
     async def _subscribe_events(self) -> None:
@@ -85,12 +85,17 @@ class CoderAgent(Agent):
         self.state.current_task = task.id
 
         try:
-            # Step 1: Generate code
+            # Step 1: Check if project generation is requested
+            is_project = task.context.get("project_mode", False)
+            if is_project:
+                return await self._generate_project(task)
+
+            # Step 2: Generate code
             code = await self._generate_code(task)
             if not code:
                 return TaskResult(task_id=task.id, status=TaskStatus.FAILED, error="No code generated")
 
-            # Step 2: Execute code (if requested and allowed)
+            # Step 3: Execute code (if requested and allowed)
             should_execute = task.context.get("execute", False)
             if should_execute and self.allow_execution:
                 result = await self._self_healing_loop(code, task, max_iterations=self.max_heal_iterations)
@@ -310,6 +315,44 @@ class CoderAgent(Agent):
                     code = lines[1]
                     break
         return code
+
+    async def _generate_project(self, task: Task) -> TaskResult:
+        """Generate a complete multi-file project structure."""
+        messages = self._build_messages(
+            f"Project Request: {task.description}\n"
+            f"Generate a full directory structure and the code for all necessary files.\n"
+            f"Return ONLY JSON in this format: {{\"files\": [ {{\"path\": \"src/main.py\", \"content\": \"...\"}}, ... ]}}"
+        )
+        
+        try:
+            response = await self._llm_chat(messages)
+            json_match = re.search(r"\{[\s\S]*\}", response.content)
+            if not json_match:
+                return TaskResult(task_id=task.id, status=TaskStatus.FAILED, error="Invalid project JSON from LLM")
+            
+            data = json.loads(json_match.group())
+            files = data.get("files", [])
+            
+            project_root = self.work_dir / f"project_{task.id[:8]}"
+            project_root.mkdir(parents=True, exist_ok=True)
+            
+            created_files = []
+            for file_info in files:
+                rel_path = file_info.get("path")
+                content = file_info.get("content")
+                if rel_path and content:
+                    full_path = project_root / rel_path
+                    full_path.parent.mkdir(parents=True, exist_ok=True)
+                    full_path.write_text(content, encoding="utf-8")
+                    created_files.append(rel_path)
+            
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.SUCCESS,
+                output=f"🚀 Proje başarıyla oluşturuldu!\nKlasör: {project_root}\nOluşturulan dosyalar: {', '.join(created_files)}"
+            )
+        except Exception as e:
+            return TaskResult(task_id=task.id, status=TaskStatus.FAILED, error=str(e))
 
     def _is_code_safe(self, code: str) -> bool:
         """Security-critical: Block dangerous patterns before execution.

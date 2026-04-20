@@ -3,46 +3,44 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── GLOBAL STYLES - Light/Dark Theme Support ────────────────────────── */
+/* ── GLOBAL STYLES - Premium Claude/Gemini Aesthetic ─────────────────── */
 @layer base {
   :root {
-    /* Light theme (default) */
-    --color-bg: 255 255 255;       /* #ffffff */
-    --color-bg-secondary: 249 250 251;  /* #f9fafb */
-    --color-bg-tertiary: 243 244 246;   /* #f3f4f6 */
-    --color-panel: 255 255 255;    /* #ffffff */
-    --color-card: 249 250 251;     /* #f9fafb */
-    --color-border: 229 231 235;   /* #e5e7eb */
-    --color-border-light: 243 244 246;  /* #f3f4f6 */
-    --color-text: 17 24 39;        /* #111827 */
-    --color-text-secondary: 107 114 128;  /* #6b7280 */
-    --color-text-tertiary: 156 163 175;   /* #9ca3af */
-    --color-text-muted: 156 163 175;      /* #9ca3af */
-    --color-accent: 59 130 246;    /* #3b82f6 */
-    --color-accent-hover: 37 99 235;  /* #2563eb */
-    --color-success: 16 185 129;   /* #10b981 */
-    --color-warning: 245 158 11;   /* #f59e0b */
-    --color-danger: 239 68 68;     /* #ef4444 */
+    /* Light Theme - Soft Greys & Purples */
+    --color-bg: 252 252 253;       /* Zinc 50 */
+    --color-bg-secondary: 244 244 245;  /* Zinc 100 */
+    --color-bg-tertiary: 228 228 231;   /* Zinc 200 */
+    --color-panel: 255 255 255;
+    --color-card: 255 255 255;
+    --color-border: 228 228 231;   /* Zinc 200 */
+    --color-border-light: 244 244 245;
+    --color-text: 24 24 27;        /* Zinc 900 */
+    --color-text-secondary: 82 82 91;  /* Zinc 600 */
+    --color-text-tertiary: 161 161 170;   /* Zinc 400 */
+    --color-accent: 99 102 241;    /* Indigo 500 */
+    --color-accent-hover: 79 70 229;  /* Indigo 600 */
+    --color-success: 16 185 129;
+    --color-warning: 245 158 11;
+    --color-danger: 239 68 68;
+    
+    --shadow-premium: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    --glass-blur: 12px;
   }
 
-  /* Dark theme */
   .dark {
-    --color-bg: 15 23 42;          /* #0f172a */
-    --color-bg-secondary: 30 41 59;   /* #1e293b */
-    --color-bg-tertiary: 51 65 85;    /* #334155 */
-    --color-panel: 30 41 59;       /* #1e293b */
-    --color-card: 51 65 85;        /* #334155 */
-    --color-border: 51 65 85;      /* #334155 */
-    --color-border-light: 71 85 105;  /* #475569 */
-    --color-text: 241 245 249;     /* #f1f5f9 */
-    --color-text-secondary: 148 163 184;  /* #94a3b8 */
-    --color-text-tertiary: 100 116 139;   /* #64748b */
-    --color-text-muted: 100 116 139;      /* #64748b */
-    --color-accent: 96 165 250;    /* #60a5fa */
-    --color-accent-hover: 59 130 246;  /* #3b82f6 */
-    --color-success: 52 211 153;   /* #34d399 */
-    --color-warning: 251 191 36;   /* #fbbf24 */
-    --color-danger: 248 113 113;   /* #f87171 */
+    /* Dark Theme - Deep Space / Graphite */
+    --color-bg: 9 9 11;            /* Zinc 950 */
+    --color-bg-secondary: 24 24 27;   /* Zinc 900 */
+    --color-bg-tertiary: 39 39 42;    /* Zinc 800 */
+    --color-panel: 18 18 18;
+    --color-card: 24 24 27;
+    --color-border: 39 39 42;      /* Zinc 800 */
+    --color-border-light: 30 30 30;
+    --color-text: 250 250 250;     /* Zinc 50 */
+    --color-text-secondary: 161 161 170;  /* Zinc 400 */
+    --color-text-tertiary: 113 113 122;   /* Zinc 500 */
+    --color-accent: 129 140 248;   /* Indigo 400 */
+    --color-accent-hover: 165 180 252;
   }
 
   * {
@@ -50,63 +48,103 @@
   }
 
   body {
-    @apply antialiased;
+    @apply antialiased selection:bg-indigo-500/30;
     background-color: rgb(var(--color-bg));
     color: rgb(var(--color-text));
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.01em;
   }
 }
 
 @layer components {
-  .card {
-    @apply rounded-xl p-6 transition-all hover:shadow-md;
-    background-color: rgb(var(--color-card));
-    border: 1px solid rgb(var(--color-border));
-    color: rgb(var(--color-text));
+  .glass-panel {
+    @apply backdrop-blur-[var(--glass-blur)] bg-white/70 dark:bg-zinc-950/70 border border-white/20 dark:border-zinc-800/20;
   }
 
-  .btn-primary {
-    @apply font-medium rounded-lg transition-colors;
+  .glass-card {
+    @apply backdrop-blur-[var(--glass-blur)] bg-white/40 dark:bg-zinc-900/40 border border-white/10 dark:border-zinc-800/10 shadow-sm transition-all hover:shadow-md;
+  }
+
+  .btn-premium {
+    @apply px-4 py-2 rounded-xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
     background-color: rgb(var(--color-accent));
     color: white;
   }
 
-  .btn-primary:hover {
+  .btn-premium:hover {
     background-color: rgb(var(--color-accent-hover));
+    @apply shadow-lg shadow-indigo-500/20;
   }
 
-  .btn-secondary {
-    @apply font-medium rounded-lg transition-colors;
-    background-color: rgb(var(--color-bg-tertiary));
-    color: rgb(var(--color-text));
+  .message-bubble-user {
+    @apply rounded-2xl px-5 py-3 max-w-[85%] bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm;
   }
 
-  .btn-secondary:hover {
-    background-color: rgb(var(--color-border));
+  .message-bubble-assistant {
+    @apply rounded-2xl px-5 py-3 max-w-[90%] bg-transparent text-zinc-800 dark:text-zinc-200;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100;
+  }
+
+  .sidebar-item-active {
+    @apply bg-indigo-500/10 text-indigo-600 dark:text-indigo-400;
   }
 }
 
 @layer utilities {
-  .scrollbar-thin {
+  .animate-slide-in {
+    animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(-20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .scrollbar-premium {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border) transparent;
+    scrollbar-color: rgb(var(--color-bg-tertiary)) transparent;
   }
 
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  .scrollbar-premium::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
+  .scrollbar-premium::-webkit-scrollbar-thumb {
+    @apply bg-zinc-300 dark:bg-zinc-700 rounded-full;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgb(var(--color-border));
-    border-radius: 4px;
+  .scrollbar-premium::-webkit-scrollbar-thumb:hover {
+    @apply bg-zinc-400 dark:bg-zinc-600;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: rgb(var(--color-text-tertiary));
+  /* Custom Premium Range Input */
+  input[type="range"].accent-indigo-600 {
+    @apply h-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 appearance-none cursor-pointer;
+  }
+  
+  input[type="range"].accent-indigo-600::-webkit-slider-thumb {
+    @apply appearance-none w-4 h-4 rounded-full bg-indigo-600 border-2 border-white dark:border-zinc-900 shadow-md transition-transform active:scale-125;
+  }
+
+  /* Switch Toggle Styling */
+  .switch-premium {
+    @apply relative inline-flex items-center cursor-pointer;
+  }
+  
+  .input-premium {
+    @apply bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none transition-all;
   }
 }

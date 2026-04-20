@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import StreamingMessage from './StreamingMessage';
 import type { ChatMessage } from '../hooks/useUltron';
+import { API_URL } from '../config';
 
 interface ChatAreaProps {
   messages: ChatMessage[];
@@ -57,7 +58,7 @@ export default function ChatArea({
     }
 
     try {
-      const res = await fetch('http://localhost:8000/api/v2/tts', {
+      const res = await fetch(`${API_URL}/api/v2/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text.substring(0, 2000), language: 'en' }),
@@ -120,35 +121,26 @@ export default function ChatArea({
             className="flex flex-col items-center justify-center min-h-[60vh] text-center"
           >
             {/* Enhanced Welcome Screen */}
-            <div className="relative mb-8">
+            <div className="relative mb-12">
               <motion.div 
-                className="w-32 h-32 rounded-3xl flex items-center justify-center"
+                className="w-24 h-24 rounded-[2rem] flex items-center justify-center relative z-10"
                 style={{ 
-                  background: 'linear-gradient(135deg, rgb(var(--color-accent)), #4f46e5)',
-                  boxShadow: '0 20px 60px rgba(99, 102, 241, 0.3)'
+                  background: 'linear-gradient(135deg, rgb(var(--color-accent)), #6366f1)',
+                  boxShadow: '0 20px 50px -10px rgba(99, 102, 241, 0.4)'
                 }}
                 animate={{ 
-                  scale: [1, 1.05, 1],
-                  rotate: [0, 2, -2, 0]
+                  borderRadius: ["2rem", "2.5rem", "2rem"],
+                  scale: [1, 1.02, 1]
                 }}
-                transition={{ 
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
+                transition={{ duration: 6, repeat: Infinity }}
               >
-                <Bot className="w-16 h-16 text-white" strokeWidth={1.5} />
+                <Bot className="w-12 h-12 text-white" strokeWidth={1.5} />
               </motion.div>
-              {/* Animated rings */}
+              {/* Pulsing glow */}
               <motion.div
-                className="absolute -inset-4 rounded-3xl border-2 border-ultron-primary/20"
-                animate={{ scale: [1, 1.1, 1], opacity: [0.5, 0.2, 0.5] }}
-                transition={{ duration: 3, repeat: Infinity }}
-              />
-              <motion.div
-                className="absolute -inset-8 rounded-3xl border border-ultron-primary/10"
-                animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.1, 0.3] }}
-                transition={{ duration: 3, repeat: Infinity, delay: 0.5 }}
+                className="absolute inset-0 rounded-full bg-indigo-500/20 blur-3xl"
+                animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0.8, 0.5] }}
+                transition={{ duration: 4, repeat: Infinity }}
               />
             </div>
 
@@ -249,16 +241,13 @@ export default function ChatArea({
                     {/* Message Content */}
                     <div className={`flex-1 max-w-3xl ${msg.role === 'user' ? 'order-1' : ''}`}>
                       <div
-                        className={`rounded-2xl px-5 py-3.5 ${
+                        className={`rounded-2xl px-6 py-4 ${
                           msg.role === 'user'
-                            ? 'rounded-br-md'
-                            : 'rounded-bl-md'
+                            ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 ml-12'
+                            : 'bg-transparent text-zinc-800 dark:text-zinc-200'
                         }`}
                         style={{
-                          backgroundColor: msg.role === 'user' 
-                            ? 'rgb(var(--color-accent))' 
-                            : 'rgb(var(--color-card))',
-                          border: `1px solid ${msg.role === 'user' ? 'transparent' : 'rgb(var(--color-border))'}`
+                          border: msg.role === 'user' ? 'none' : 'none'
                         }}
                       >
                         <div className="prose prose-sm max-w-none" style={{ 
@@ -379,32 +368,23 @@ export default function ChatArea({
                 animate={{ opacity: 1, y: 0 }}
                 className="flex gap-4"
               >
-                <div 
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'linear-gradient(135deg, rgb(var(--color-accent)), #4f46e5)' }}
-                >
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-600 shadow-sm">
                   <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
                 </div>
                 <div className="flex-1 max-w-3xl">
-                  <div
-                    className="rounded-2xl rounded-bl-md px-5 py-3.5"
-                    style={{ 
-                      backgroundColor: 'rgb(var(--color-card))',
-                      border: '1px solid rgb(var(--color-border))'
-                    }}
-                  >
-                    <div className="prose prose-sm max-w-none" style={{ color: 'rgb(var(--color-text))' }}>
+                  <div className="rounded-2xl px-6 py-4 bg-transparent">
+                    <div className="prose prose-sm max-w-none text-zinc-800 dark:text-zinc-200">
                       <StreamingMessage content={currentResponse} isStreaming={true} />
                     </div>
                   </div>
                   {/* Streaming indicator */}
-                  <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: 'rgb(var(--color-text-muted))' }}>
+                  <div className="flex items-center gap-2 mt-2 px-6 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
                     <motion.div
                       animate={{ opacity: [0.3, 1, 0.3] }}
                       transition={{ duration: 1.5, repeat: Infinity }}
-                      className="w-2 h-2 rounded-full bg-ultron-primary"
+                      className="w-1.5 h-1.5 rounded-full bg-indigo-500"
                     />
-                    <span>Ultron is thinking...</span>
+                    <span>Ultron is generating...</span>
                   </div>
                 </div>
               </motion.div>
@@ -417,32 +397,21 @@ export default function ChatArea({
                 animate={{ opacity: 1, y: 0 }}
                 className="flex gap-4"
               >
-                <div 
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'linear-gradient(135deg, rgb(var(--color-accent)), #4f46e5)' }}
-                >
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-600 shadow-sm">
                   <Bot className="w-5 h-5 text-white" strokeWidth={1.5} />
                 </div>
                 <div className="flex-1 max-w-3xl">
-                  <div
-                    className="rounded-2xl rounded-bl-md px-5 py-6"
-                    style={{ 
-                      backgroundColor: 'rgb(var(--color-card))',
-                      border: '1px solid rgb(var(--color-border))'
-                    }}
-                  >
-                    {/* Typing animation */}
+                  <div className="px-6 py-4">
                     <div className="flex items-center gap-1.5">
                       {[0, 1, 2].map(i => (
                         <motion.div
                           key={i}
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: 'rgb(var(--color-accent))' }}
-                          animate={{ y: [0, -8, 0] }}
+                          className="w-2 h-2 rounded-full bg-indigo-500/40"
+                          animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
                           transition={{ 
-                            duration: 0.6, 
+                            duration: 1, 
                             repeat: Infinity, 
-                            delay: i * 0.15,
+                            delay: i * 0.2,
                             ease: "easeInOut"
                           }}
                         />

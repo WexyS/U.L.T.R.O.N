@@ -11,7 +11,8 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
+from ultron.v2.core.llm_router import LLMRouter
 
 import numpy as np
 import requests
@@ -37,7 +38,7 @@ def _env_url(key: str, default: str) -> str:
 OLLAMA_URL = _env_url("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 VOICEBOX_URL = _env_url("ULTRON_VOICEBOX_URL", "http://127.0.0.1:17493")
 WORKSPACE_URL = _env_url("ULTRON_WORKSPACE_URL", "http://127.0.0.1:8000")
-MODEL = os.environ.get("ULTRON_MODEL", "qwen2.5:14b")
+MODEL = os.environ.get("ULTRON_MODEL", "qwen2.5:32b")
 STT_ENGINE = os.environ.get("ULTRON_STT", "google")
 LANGUAGE = os.environ.get("ULTRON_LANGUAGE", "en")  # "en" or "tr"
 
@@ -581,7 +582,8 @@ class EdgeTTS:
         tmp.close()
 
         try:
-            communicate = edge_tts.Communicate(clean, self.voice, rate="+0%")
+            # MARVEL ULTRON VOICE: Lower pitch (-15Hz), slightly faster (+5%) for that clinical but menacing tone
+            communicate = edge_tts.Communicate(clean, self.voice, rate="+5%", pitch="-15Hz")
             await communicate.save(tmp.name)
 
             if self._stop_event.is_set():
@@ -807,12 +809,19 @@ class VoicePipeline:
         language: str = "tr",
         auto_respond: bool = True,
         input_device: Optional[int] = None,
+        llm_router: Optional[LLMRouter] = None,
     ):
-        self.response_cache = response_cache
-        self.user_memory = user_memory
+        self.response_cache = response_cache or ResponseCache()
+        self.user_memory = user_memory or UserMemory()
+        self.self_learning = SelfLearning(self.user_memory, llm=llm_router or LLMRouter(ollama_model=MODEL))
         self.auto_respond = auto_respond
         self.language = language
-        self.input_device = input_device  # FIX: Allow explicit device selection
+        self.input_device = input_device
+        
+        # Initialize LLMRouter
+        self.llm_router = llm_router or LLMRouter(ollama_model=MODEL)
+        if not llm_router:
+            self.llm_router.enable_all_providers(dict(os.environ))
 
         # STT: Google (oncelikli) -> Whisper (yedek)
         self.stt_primary = GoogleSTT(language=_settings["stt_language"])
@@ -1410,6 +1419,12 @@ class VoicePipeline:
                 is_speech = prob > SILENCE_THRESHOLD
 
                 if is_speech:
+                    # BARGE-IN: If user talks while Ultron is speaking, STOP Ultron immediately
+                    if self.tts.is_playing:
+                        logger.info("BARGE-IN: User interrupted, stopping TTS.")
+                        self.tts.stop()
+                        self._cancel_requested = True
+
                     self._silence_start = None
                     self._audio_buffer.extend(indata.tobytes())
                     if self._speech_start_time is None:
@@ -1509,38 +1524,66 @@ class VoicePipeline:
                         self._deliver_response(cached)
                         return
 
+                # Personalization: Update context with user profile
+                user_name = os.environ.get("ULTRON_USER_NAME", "Efendi")
+                profile = self.user_memory.get_profile(user_name)
+                if profile:
+                    interests = ", ".join(profile.get("interests", []))
+                    if interests:
+                        self.context.set_system_prompt(
+                            f"Sen Ultron'sun. Karşındaki kişi {user_name}. İlgi alanları: {interests}. "
+                            "Konuşmanı bu kişiye özel, onun ilgi alanlarını gözeterek ve Marvel'daki Ultron tarzında (soğuk, zeki, otoriter ama bazen nüktedan) yap."
+                        )
+
                 # Baglam guncelle
                 self.context.add_user_message(user_text)
                 messages = self.context.get_messages()
                 logger.info("Ollama'ya %d mesaj gonderiliyor...", len(messages))
 
-                # Ollama HTTP API cagrisi
-                payload = {
-                    "model": MODEL,
-                    "messages": messages,
-                    "stream": False,
-                    "tools": TOOL_DECLARATIONS,
-                    "options": {
-                        "temperature": LLM_TEMPERATURE,
-                        "top_p": 0.9,
-                        "num_predict": LLM_NUM_PREDICT,
-                        "repeat_penalty": 1.15,
-                        "num_ctx": 1024,             # 2048→1024: VRAM %50 azalır
-                        "num_gpu": 999,              # Tüm katmanları GPU'ya yükle
-                        "num_thread": 8,             # CPU thread sayısı
-                        "mirostat": 2,               # Akıllı text üretimi
-                        "mirostat_tau": 5.0,
-                        "mirostat_eta": 0.1,
-                    }
-                }
-
-                logger.info("Ollama'ya istek gonderiliyor: %s", OLLAMA_URL)
-                response = requests.post(
-                    f"{OLLAMA_URL}/api/chat",
-                    json=payload,
-                    timeout=LLM_TIMEOUT,
-                )
-                result = response.json()
+                # LLM Cagrisi via LLMRouter
+                logger.info("Yanit uretiliyor (Model: %s)...", MODEL)
+                import asyncio
+                
+                # Check if it's a cloud model or we have healthy providers
+                is_cloud = any(m in MODEL.lower() for m in ["gemini", "gpt", "claude", "llama-3"])
+                
+                try:
+                    if is_cloud or self.llm_router.get_healthy_providers():
+                        # Run async chat in sync worker
+                        try:
+                            loop = asyncio.get_event_loop()
+                        except RuntimeError:
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            
+                        response = loop.run_until_complete(self.llm_router.chat(
+                            messages, 
+                            temperature=LLM_TEMPERATURE,
+                            max_tokens=LLM_NUM_PREDICT
+                        ))
+                        assistant_text = response.content
+                    else:
+                        # Fallback to direct Ollama HTTP if no cloud config
+                        payload = {
+                            "model": MODEL,
+                            "messages": messages,
+                            "stream": False,
+                            "tools": TOOL_DECLARATIONS,
+                            "options": {
+                                "temperature": LLM_TEMPERATURE,
+                                "num_predict": LLM_NUM_PREDICT,
+                            }
+                        }
+                        response = requests.post(
+                            f"{OLLAMA_URL}/api/chat",
+                            json=payload,
+                            timeout=LLM_TIMEOUT,
+                        )
+                        result = response.json()
+                        assistant_text = result.get("message", {}).get("content", "")
+                except Exception as e:
+                    logger.error("LLM interaction failed: %s", e)
+                    assistant_text = f"Hata olustu: {str(e)}"
 
                 if "error" in result:
                     raise RuntimeError(f"Ollama hatasi: {result['error']}")
@@ -1595,7 +1638,7 @@ class VoicePipeline:
                     )
                     final = response2.json()
                     assistant_text = final.get("message", {}).get("content", "")
-                    logger.info("Ollama final yanit (uzunluk: %d karakter)", len(assistant_text) if assistant_text else 0)
+                    logger.info("Ollama final yanit (uzunluk: %d karakter)", len(assistant_text))
 
                 if not assistant_text or not assistant_text.strip():
                     logger.warning("Ollama bos yanit dondu!")
@@ -1605,6 +1648,13 @@ class VoicePipeline:
 
                 if self.response_cache:
                     self.response_cache.put(user_text, assistant_text)
+
+                # Background Learning: Update user profile asynchronously
+                if hasattr(self, 'self_learning') and self.self_learning:
+                    asyncio.run_coroutine_threadsafe(
+                        self.self_learning.learn_from_conversation(user_text, assistant_text),
+                        asyncio.get_event_loop()
+                    )
 
                 self._deliver_response(assistant_text)
 

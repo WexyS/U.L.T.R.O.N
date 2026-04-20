@@ -9,8 +9,8 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 # Suppress verbose Torch and EasyOCR warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="torch.*|easyocr.*")
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="torch.*|websockets.*")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="torch.*|websockets.*|uvicorn.*")
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Depends, HTTPException
@@ -91,7 +91,8 @@ async def lifespan(app: FastAPI):
         from ultron.v2.memory.engine import MemoryEngine
         from ultron.v2.core.orchestrator import Orchestrator
 
-        llm = LLMRouter(ollama_model="qwen2.5:14b")
+        llm_model = os.getenv("ULTRON_MODEL", "qwen2.5:32b")
+        llm = LLMRouter(ollama_model=llm_model)
         llm.enable_all_providers(dict(os.environ))
         memory = MemoryEngine(persist_dir="./data/memory_v2")
         _orchestrator = Orchestrator(llm_router=llm, memory=memory, work_dir="./workspace")
@@ -101,8 +102,6 @@ async def lifespan(app: FastAPI):
         try:
             from ultron.v2.core.auto_launchers import start_all_auto_launchers
             from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
-            import asyncio
-            import os
             
             await start_all_auto_launchers()
 
@@ -124,9 +123,17 @@ async def lifespan(app: FastAPI):
         if _use_structlog:
             logger.info("llm_providers", providers=llm.get_healthy_providers())
             logger.info("agents_started", agents=list(_orchestrator.agents.keys()))
+            if _orchestrator.mcp_manager.enabled:
+                logger.info("mcp_enabled", servers=_orchestrator.mcp_manager.list_server_ids())
+            else:
+                logger.info("mcp_disabled")
         else:
             logger.info("LLM Providers: %s", llm.get_healthy_providers())
             logger.info("Agents started: %s", list(_orchestrator.agents.keys()))
+            if _orchestrator.mcp_manager.enabled:
+                logger.info("MCP Enabled. Active servers: %s", _orchestrator.mcp_manager.list_server_ids())
+            else:
+                logger.info("MCP is disabled or no servers configured.")
     except Exception as e:
         if _use_structlog:
             logger.error("startup_failed", error=str(e), exc_info=True)
@@ -180,15 +187,19 @@ from ultron.api.routes.agents import router as agents_router
 from ultron.api.routes.status import router as status_router
 from ultron.api.routes.training import router as training_router
 from ultron.api.routes.conversations import router as conversations_router
+from ultron.api.routes.composer import router as composer_router
+from ultron.api.routes.voice import router as voice_router
 
 app.include_router(chat_router)
 app.include_router(agents_router)
 app.include_router(status_router)
 app.include_router(training_router)
 app.include_router(conversations_router)
+app.include_router(composer_router)
+app.include_router(voice_router)
 
 # Workspace models — needed for endpoint type hints
-from ultron.v2.workspace.models import CloneRequest, GenerateRequest, SynthesizeRequest
+from ultron.v2.workspace.models import CloneRequest, GenerateRequest, SynthesizeRequest, OpenFolderRequest
 
 # Workspace manager — lazy init to avoid heavy imports at startup
 
@@ -293,6 +304,47 @@ async def synthesize(req: SynthesizeRequest, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/v2/status", tags=["System"])
+async def get_status():
+    orch = await get_orchestrator()
+    if not orch:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+    return orch.get_status()
+
+@app.get("/api/v2/status/evolution", tags=["System"])
+async def get_evolution_status():
+    """Get statistics from the self-improvement and evolution engines."""
+    orch = await get_orchestrator()
+    if not orch:
+        return {"error": "Orchestrator not ready"}
+        
+    stats = {}
+    if hasattr(orch, 'self_improvement'):
+        stats["self_improvement"] = orch.self_improvement.get_stats()
+    
+    # Check if eternal evolution is active
+    import os
+    stats["eternal_evolution"] = {
+        "enabled": os.getenv("ULTRON_EVOLUTION_ENABLED", "0") in ("1", "true", "yes", "on"),
+        "allow_git": os.getenv("ULTRON_EVOLUTION_ALLOW_GIT", "0") in ("1", "true", "yes", "on"),
+    }
+    return stats
+
+@app.post("/api/v2/workspace/evolve", tags=["Workspace"])
+async def trigger_evolution():
+    """Manually trigger the autonomous evolution cycle."""
+    orch = await get_orchestrator()
+    if not orch:
+        raise HTTPException(status_code=503, detail="Orchestrator not initialized")
+        
+    if not hasattr(orch, 'evolution'):
+        from ultron.v2.core.eternal_evolution import EternalEvolutionEngine
+        orch.evolution = EternalEvolutionEngine(orch)
+        
+    asyncio.create_task(orch.evolution.evolution_cycle())
+    return {"status": "Evolution cycle triggered", "message": "Ultron is brainstorming and evolving..."}
+
+
 @app.get("/api/v2/workspace/list")
 async def list_workspace():
     mgr = await get_workspace_mgr()
@@ -305,6 +357,21 @@ async def search_workspace(q: str, top_k: int = 5):
     mgr = await get_workspace_mgr()
     results = await mgr.search_templates(q, top_k)
     return {"results": results}
+
+
+@app.post("/api/v2/workspace/open-folder", dependencies=[Depends(verify_api_key)])
+async def open_workspace_folder(req: OpenFolderRequest, request: Request):
+    """Opens the folder in the local OS file explorer."""
+    logger.info("open_workspace_folder_called", item_id=req.id)
+    try:
+        mgr = await get_workspace_mgr()
+        success = await mgr.open_folder(req.id)
+        if not success:
+            logger.warning("open_folder_failed", item_id=req.id)
+        return {"success": success}
+    except Exception as e:
+        logger.error("open_folder_error", error=str(e), item_id=req.id)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -159,6 +159,26 @@ async def delete_conversation(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/all")
+async def delete_all_conversations():
+    """Delete ALL conversations and their messages."""
+    try:
+        from ultron.v2.memory.conversation_store import ConversationStore
+        store = ConversationStore()
+        all_convs = store.list_conversations(limit=9999)
+        deleted = 0
+        for conv in all_convs:
+            try:
+                store.delete_conversation(conv.id)
+                deleted += 1
+            except Exception:
+                pass
+        return {"status": "cleared", "deleted": deleted}
+    except Exception as e:
+        logger.error("Failed to clear all conversations: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Message Endpoints ────────────────────────────────────────────────────
 
 @router.get("/{conversation_id}/messages")

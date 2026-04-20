@@ -43,20 +43,33 @@ class GroqProvider(BaseProvider):
 
     async def chat(self, messages, model=None, max_tokens=2048, temperature=0.7, stream=False) -> ProviderResult:
         m = model or self.config.default_model
+        start = time.monotonic()
+        self.stats.total_calls += 1
         async with httpx.AsyncClient(timeout=self.config.timeout) as c:
-            r = await c.post(
-                f"{self.config.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self.config.api_key}"},
-                json={"model": m, "messages": [{"role": x.role, "content": x.content} for x in messages],
-                      "max_tokens": max_tokens, "temperature": temperature}
-            )
-            r.raise_for_status()
-            data = r.json()
-            return ProviderResult(
-                content=data["choices"][0]["message"]["content"],
-                provider="groq", model=m,
-                tokens_used=data.get("usage", {}).get("total_tokens", 0)
-            )
+            try:
+                r = await c.post(
+                    f"{self.config.base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    json={"model": m, "messages": [{"role": x.role, "content": x.content} for x in messages],
+                        "max_tokens": max_tokens, "temperature": temperature}
+                )
+                r.raise_for_status()
+                data = r.json()
+                latency = (time.monotonic() - start) * 1000
+                self.stats.successful_calls += 1
+                self.stats.total_latency_ms += latency
+                self.stats.last_active = datetime.now()
+                self.stats.consecutive_failures = 0
+                return ProviderResult(
+                    content=data["choices"][0]["message"]["content"],
+                    provider="groq", model=m,
+                    tokens_used=data.get("usage", {}).get("total_tokens", 0)
+                )
+            except Exception as e:
+                self.stats.failed_calls += 1
+                self.stats.consecutive_failures += 1
+                self.stats.last_error = str(e)
+                raise
 
     async def stream_chat(self, messages, model=None) -> AsyncIterator[str]:
         m = model or self.config.default_model
@@ -99,18 +112,47 @@ class GeminiProvider(BaseProvider):
         contents = []
         for msg in messages:
             role = "model" if msg.role == "assistant" else "user"
-            contents.append({"role": role, "parts": [{"text": msg.content}]})
+            parts = []
+            if isinstance(msg.content, list):
+                for item in msg.content:
+                    if item.get("type") == "text":
+                        parts.append({"text": item["text"]})
+                    elif item.get("type") == "image_url":
+                        url = item["image_url"]["url"]
+                        if url.startswith("data:"):
+                            import re
+                            match = re.match(r"data:(image\/\w+);base64,(.+)", url)
+                            if match:
+                                media_type, data = match.groups()
+                                parts.append({"inline_data": {"mime_type": media_type, "data": data}})
+            else:
+                parts.append({"text": msg.content})
+            contents.append({"role": role, "parts": parts})
 
+        from datetime import datetime
+        start = time.monotonic()
+        self.stats.total_calls += 1
         url = f"{self.config.base_url}/{m}:generateContent?key={self.config.api_key}"
         async with httpx.AsyncClient(timeout=self.config.timeout) as c:
-            r = await c.post(url, json={
-                "contents": contents,
-                "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature}
-            })
-            r.raise_for_status()
-            data = r.json()
-            content = data["candidates"][0]["content"]["parts"][0]["text"]
-            return ProviderResult(content=content, provider="gemini", model=m)
+            try:
+                r = await c.post(url, json={
+                    "contents": contents,
+                    "generationConfig": {"maxOutputTokens": max_tokens, "temperature": temperature}
+                })
+                r.raise_for_status()
+                data = r.json()
+                content = data["candidates"][0]["content"]["parts"][0]["text"]
+                latency = (time.monotonic() - start) * 1000
+                self.stats.successful_calls += 1
+                self.stats.total_latency_ms += latency
+                self.stats.last_active = datetime.now()
+                self.stats.consecutive_failures = 0
+                return ProviderResult(content=content, provider="gemini", model=m)
+            except Exception as e:
+                self.stats.failed_calls += 1
+                self.stats.consecutive_failures += 1
+                self.stats.last_error = str(e)
+                raise
 
     async def stream_chat(self, messages, model=None) -> AsyncIterator[str]:
         yield (await self.chat(messages, model)).content
@@ -139,16 +181,29 @@ class CloudflareProvider(BaseProvider):
 
     async def chat(self, messages, model=None, max_tokens=2048, temperature=0.7, stream=False) -> ProviderResult:
         m = model or self.config.default_model
+        start = time.monotonic()
+        self.stats.total_calls += 1
         url = f"{self.config.base_url}/{m}"
         async with httpx.AsyncClient(timeout=self.config.timeout) as c:
-            r = await c.post(url,
-                headers={"Authorization": f"Bearer {self.config.api_key}"},
-                json={"messages": messages, "max_tokens": max_tokens, "temperature": temperature}
-            )
-            r.raise_for_status()
-            data = r.json()
-            content = data.get("result", {}).get("response", "")
-            return ProviderResult(content=content, provider="cloudflare", model=m)
+            try:
+                r = await c.post(url,
+                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    json={"messages": [{"role": x.role, "content": x.content} for x in messages], "max_tokens": max_tokens, "temperature": temperature}
+                )
+                r.raise_for_status()
+                data = r.json()
+                content = data.get("result", {}).get("response", "")
+                latency = (time.monotonic() - start) * 1000
+                self.stats.successful_calls += 1
+                self.stats.total_latency_ms += latency
+                self.stats.last_active = datetime.now()
+                self.stats.consecutive_failures = 0
+                return ProviderResult(content=content, provider="cloudflare", model=m)
+            except Exception as e:
+                self.stats.failed_calls += 1
+                self.stats.consecutive_failures += 1
+                self.stats.last_error = str(e)
+                raise
 
     async def stream_chat(self, messages, model=None) -> AsyncIterator[str]:
         yield (await self.chat(messages, model)).content

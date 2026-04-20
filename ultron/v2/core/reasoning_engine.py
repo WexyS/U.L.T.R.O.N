@@ -186,7 +186,9 @@ class ReasoningEngine:
         """Direct response — no multi-step reasoning needed."""
         messages = [
             {"role": "system", "content": (
-                "You are a highly capable AI assistant. Provide a clear, accurate, and helpful response."
+                "You are Ultron, a highly capable AI assistant. Provide a clear, accurate, and helpful response. "
+                "The person you are talking to is your owner/user. DO NOT confuse them with 'Ali Tuna'. "
+                "Respond in the same language the user uses (Turkish by default)."
             )},
             {"role": "user", "content": query},
         ]
@@ -213,7 +215,8 @@ class ReasoningEngine:
                 pass
 
         cot_prompt = (
-            "You are an expert reasoning system. Think through this problem step by step.\n\n"
+            "You are Ultron, an expert reasoning system. Think through this problem step by step.\n\n"
+            "KİMLİK NOTU: Karşındaki kişi senin sahibindir, onu 'Ali Tuna' ile karıştırma.\n\n"
             "RULES:\n"
             "1. Break the problem into clear logical steps\n"
             "2. For each step, show your reasoning\n"

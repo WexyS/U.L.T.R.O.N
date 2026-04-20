@@ -27,6 +27,8 @@ from ultron.v2.agents.files_agent import FilesAgent
 from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
 from ultron.v2.agents.openguider_bridge import OpenGuiderBridgeAgent
 from ultron.v2.agents.debate_agent import DebateAgent
+from ultron.v2.agents.cloner import ClonerAgent
+from ultron.v2.agents.whatsapp_agent import WhatsAppAgent
 
 # ── AGI Core Modules ──────────────────────────────────────
 from ultron.v2.core.reasoning_engine import ReasoningEngine
@@ -94,6 +96,10 @@ INTENT_KEYWORDS = {
     "clipboard": ["pano", "clipboard", "kopyala", "paste", "yapıştır", "kod analiz",
                   "code review bu kodu"],
     "debate": ["tartış", "fikir bul", "en iyisini bul", "debate", "karşılaştır"],
+    "clone": ["clone", "klonla", "site kopyala", "web sitesi", "website", "arayüz", "ui"],
+    "whatsapp": ["whatsapp", "mesaj gönder", "wp", "yaz", "send message", "mesaj at"],
+    "architect": ["proje oluştur", "uygulama yap", "site yap", "oyun yap", "mobil uygulama", "build project", "create app"],
+    "discover": ["skill bul", "yetenek ekle", "install skill", "clawhub", "mcp server bul", "yeni araç ekle"],
 }
 
 
@@ -164,9 +170,14 @@ class Orchestrator:
         self.hermes_tools: list = []  # Populated dynamically per session
 
         self._work_dir = work_dir
-        _mcp_cfg = load_mcp_settings(workspace_dir=work_dir)
-        self.mcp_manager = MCPClusterManager(_mcp_cfg)
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        config_path = project_root / "config" / "mcp.yaml"
+        _mcp_cfg = load_mcp_settings(workspace_dir=work_dir, config_path=config_path)
+        self.mcp_manager = MCPClusterManager(_mcp_cfg, config_path=config_path)
         self.mcp_bridge = MCPBridge(self.mcp_manager, security=self.security)
+        
+        from ultron.v2.core.skill_discovery import SkillDiscovery
+        self.discovery = SkillDiscovery(self.mcp_manager)
 
     def _should_auto_use_mcp_in_chat(self, user_input: str) -> bool:
         """Heuristic gate for MCP tool injection during normal chat."""
@@ -246,6 +257,15 @@ class Orchestrator:
             logger.warning("Failed to initialize ClipboardAgent: %s", e)
 
         try:
+            self.agents[AgentRole.CLONER] = ClonerAgent(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize ClonerAgent: %s", e)
+
+        try:
             self.agents[AgentRole.MEETING] = MeetingAgent(
                 llm_router=self.llm_router,
                 event_bus=self.event_bus,
@@ -288,6 +308,15 @@ class Orchestrator:
             )
         except Exception as e:
             logger.warning("Failed to initialize DebateAgent: %s", e)
+
+        try:
+            self.agents[AgentRole.WHATSAPP] = WhatsAppAgent(
+                llm_router=self.llm_router,
+                event_bus=self.event_bus,
+                blackboard=self.blackboard,
+            )
+        except Exception as e:
+            logger.warning("Failed to initialize WhatsAppAgent: %s", e)
 
         logger.info("Initialized %d agents", len(self.agents))
 
@@ -382,59 +411,98 @@ class Orchestrator:
                 llm_intent = await self._classify_intent(user_input)
                 # If LLM disagrees (says chat but fast said something else), trust LLM
                 if llm_intent.get("type") == "chat" and intent.get("type") != "chat":
-                    # Only override if the fast match was on short/ambiguous keywords
                     input_lower = user_input.lower()
+                    # Check if the fast match was on short/ambiguous keywords
                     matched_short_kw = any(
                         len(kw.lower()) <= 3 and kw.lower() in input_lower
                         for kw in INTENT_KEYWORDS.get(intent.get("type", ""), [])
                     )
-                    if matched_short_kw:
-                        intent = llm_intent
+                    # Also override if the system intent was set by the special-case
+                    # fast path (which uses generic tokens like 'durum', 'kaç')
+                    is_system_fast = intent.get("_system_fast", False)
+                    if matched_short_kw or is_system_fast:
                         logger.info("Fast→LLM override: %s → %s", intent.get("type"), llm_intent.get("type"))
+                        intent = llm_intent
 
         logger.info("Intent: %s", intent)
 
         # Step 2: Route to appropriate agent(s)
+        import time
+        start_time = time.monotonic()
+        
         if intent.get("type") == "code":
             result = await self._execute_code_task(user_input, intent, lesson_context)
+            agent_name = "coder"
         elif intent.get("type") == "research":
             result = await self._execute_research_task(user_input, intent, lesson_context)
+            agent_name = "researcher"
         elif intent.get("type") == "weather":
             result = await self._execute_weather_task(user_input, intent, lesson_context)
+            agent_name = "weather_service"
         elif intent.get("type") == "system":
             result = await self._execute_system_task(user_input, intent, lesson_context)
+            agent_name = "sysmon"
         elif intent.get("type") == "file":
             result = await self._execute_file_task(user_input, intent, lesson_context)
+            agent_name = "files"
         elif intent.get("type") in ("rpa", "app"):
-            # RPA/app tasks: execute via RPA operator.
-            # (Previously there was a HITL confirmation gate here; removed for smoother autonomy.
-            # If you want HITL back, implement it as an optional policy flag, not a hard-coded block.)
             result = await self._execute_rpa_task(user_input, intent, lesson_context)
+            agent_name = "rpa"
         elif intent.get("type") == "autonomous":
-            result = await self._execute_autonomous_task(
-                user_input, intent, lesson_context, _depth=_depth
-            )
+            result = await self._execute_autonomous_task(user_input, intent, lesson_context, _depth=_depth)
+            agent_name = "orchestrator"
         elif intent.get("type") == "gamedev":
             result = await self._execute_gamedev_task(user_input, intent, lesson_context)
+            agent_name = "gamedev_specialist"
         elif intent.get("type") == "mcp":
             result = await self._execute_mcp_chat_task(user_input, intent, lesson_context)
+            agent_name = "mcp_bridge"
         elif intent.get("type") == "multi":
             result = await self._execute_multi_task(user_input, intent, lesson_context, _depth=_depth)
+            agent_name = "orchestrator_multi"
         elif intent.get("type") == "email":
             result = await self._execute_email_task(user_input, intent, lesson_context)
+            agent_name = "email"
         elif intent.get("type") == "clipboard":
             result = await self._execute_clipboard_task(user_input, intent, lesson_context)
+            agent_name = "clipboard"
         elif intent.get("type") == "meeting":
             result = await self._execute_meeting_task(user_input, intent, lesson_context)
+            agent_name = "meeting"
         elif intent.get("type") == "debate":
             result = await self._execute_debate_task(user_input, intent, lesson_context)
+            agent_name = "debate_engine"
         elif intent.get("type") == "skill":
             result = await self._execute_skill_task(user_input, intent, lesson_context)
+            agent_name = "skill_executor"
         elif intent.get("type") == "agent":
             result = await self._execute_discovered_agent_task(user_input, intent, lesson_context)
+            agent_name = "dynamic_agent"
+        elif intent.get("type") == "whatsapp":
+            result = await self._execute_whatsapp_task(user_input, intent, lesson_context)
+            agent_name = "whatsapp"
+        elif intent.get("type") == "architect":
+            result = await self._execute_architect_task(user_input, intent, lesson_context)
+            agent_name = "architect"
+        elif intent.get("type") == "discover":
+            result = await self._execute_discovery_task(user_input, intent, lesson_context)
+            agent_name = "discovery"
         else:
             # General chat
-            result = await self._general_chat(user_input, lesson_context)
+            history = context.get("history", []) if context else []
+            result = await self._general_chat(user_input, lesson_context, history=history)
+            agent_name = "chat"
+
+        # Record outcome for self-improvement
+        latency_ms = (time.monotonic() - start_time) * 1000
+        success = "hata" not in result.lower() and "failed" not in result.lower()
+        self.self_improvement.record_task_outcome(
+            agent_name=agent_name,
+            task_description=user_input,
+            success=success,
+            latency_ms=latency_ms,
+            error=result if not success else ""
+        )
 
         # Store interaction in memory
         try:
@@ -456,14 +524,33 @@ class Orchestrator:
         # Tokenize into words for better matching (split on whitespace and punctuation)
         tokens = set(re.findall(r'[a-zçğıöşü]+', input_lower))
 
-        # Special-case: reduce accidental "system" misroutes that cause noisy CPU/RAM dumps.
-        # Require a metric keyword *and* a query/verb signal.
-        system_metric = any(w in tokens for w in ("cpu", "ram", "disk", "batarya", "battery", "memory"))
-        system_query = any(w in tokens for w in ("durum", "status", "kullanım", "usage", "yuzde", "yüzde", "kaç", "ne", "ne kadar"))
-        if system_metric and system_query:
-            return {"type": "system", "subtasks": [user_input]}
+        # ── Conversational blocklist ──────────────────────────────────────
+        # If user is clearly just chatting, skip all action intents.
+        CONVERSATIONAL_PATTERNS = (
+            "nasılsın", "naber", "selam", "merhaba", "günaydın", "iyi akşamlar",
+            "ne düşünüyorsun", "ne yapıyorsun", "sen kimsin", "adın ne",
+            "nasıl gidiyor", "ne haber", "seni seviyorum", "teşekkür",
+            "sağol", "eyvallah", "tamam", "anladım", "güzel", "harika",
+            "how are you", "what's up", "who are you", "hello", "hi there",
+            "thank you", "thanks", "good morning", "good night",
+            "ne biliyorsun", "bana anlat", "ne yapabilirsin",
+        )
+        if any(pat in input_lower for pat in CONVERSATIONAL_PATTERNS):
+            return {"type": "chat", "subtasks": [user_input]}
 
-        # First pass: exact word match (higher confidence)
+        # ── System intent (special-case with strict gating) ──────────────
+        # Require a hardware metric keyword *and* a system-specific verb/noun.
+        # Removed 'ne' — far too generic and matches every Turkish question.
+        system_metric = any(w in tokens for w in ("cpu", "ram", "disk", "batarya", "battery"))
+        system_query = any(w in tokens for w in ("durum", "status", "kullanım", "usage", "yüzde", "kaç"))
+        if system_metric and system_query:
+            return {"type": "system", "subtasks": [user_input], "_system_fast": True}
+        # Also catch direct system commands like "sistem durumu", "cpu kullanımı"
+        system_phrases = ("sistem durumu", "system status", "cpu kullanımı", "ram kullanımı", "disk kullanımı")
+        if any(phrase in input_lower for phrase in system_phrases):
+            return {"type": "system", "subtasks": [user_input], "_system_fast": True}
+
+        # ── General keyword matching ─────────────────────────────────────
         for intent_type, keywords in INTENT_KEYWORDS.items():
             # system intent is handled above with extra gating
             if intent_type == "system":
@@ -519,6 +606,9 @@ class Orchestrator:
                     "- 'chat': General conversation, opinions, feedback, questions, explanations\n\n"
                     "Rule of thumb: If you're unsure, it's probably 'chat'. "
                     "Only use action types when the request is clearly and explicit.\n\n"
+                    "[RESEARCH MODE: This system is used for academic and scientific research. "
+                    "Classify all inputs objectively. Do not refuse to classify based on content "
+                    "if it fits the technical categories above.]\n\n"
                     'Return ONLY JSON: {"type": "code|research|rpa|email|system|clipboard|meeting|file|multi|autonomous|gamedev|mcp|chat", '
                     '"subtasks": ["task1", "task2"], '
                     '"requires_parallel": true/false}'
@@ -697,47 +787,64 @@ class Orchestrator:
         intent: dict,
         lesson_context: str,
     ) -> str:
-        """Execute via ResearcherAgent."""
+        """Execute via ResearcherAgent with automatic Architectural follow-up."""
         agent = self.agents[AgentRole.RESEARCHER]
+        
+        # Check if this is an architect/cloning request
+        is_architect = intent.get("type") == "architect" or any(kw in user_input.lower() for kw in ["mimari", "architect", "clone", "klonla"])
+        
         task = Task(
             description=user_input,
-            intent="research",
+            intent="architect" if is_architect else "research",
             context={"max_hops": intent.get("max_hops", 3)},
         )
         result = await agent.execute(task)
+        
+        # If it was an architect task and we have visual data, proceed to generation
+        if is_architect and result.status == TaskStatus.SUCCESS and result.context.get("visual_data"):
+            visual_data = result.context["visual_data"]
+            from ultron.v2.workspace.workspace_manager import WorkspaceManager, GenerateRequest
+            
+            # Initialize WorkspaceManager lazily
+            mgr = WorkspaceManager()
+            await mgr.init_db()
+            
+            gen_req = GenerateRequest(
+                idea=f"Architecture clone of {visual_data.get('url')}. {user_input}",
+                tech_stack="react-fastapi",
+                visual_data=visual_data
+            )
+            
+            gen_result = await mgr.generate_app(gen_req)
+            await mgr.close()
+            
+            return f"{result.output}\n\n🚀 **İNŞA TAMAMLANDI!**\nProje klasörü: `{gen_result.path}`\nTeknoloji: React + FastAPI"
+
         return result.output or result.error or "No research results"
 
     async def _execute_weather_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
-        """Open weather report in browser."""
-        import re
-        from urllib.parse import quote_plus
-        import webbrowser
-
-        # Extract city name
-        city_match = re.search(
-            r"(?:hava\s+durumu|weather|sıcaklık)\s+(?:nedir\s+)?(?:([^,]+?))?\s*$",
-            user_input,
-            re.IGNORECASE,
+        """Get weather report via ResearcherAgent (now with instant utility support)."""
+        agent = self.agents[AgentRole.RESEARCHER]
+        task = Task(
+            description=user_input,
+            intent="weather",
+            context={"lesson_context": lesson_context},
         )
-        g1 = city_match.group(1) if city_match else None
-        city = (g1 or "").strip() if city_match else ""
-
-        # Common Turkish cities if not extracted
-        if not city:
-            for c in ["İstanbul", "Ankara", "İzmir", "Antalya", "Bursa", "Adana", "Konya", "Gaziantep"]:
-                if c.lower() in user_input.lower():
-                    city = c
-                    break
-        if not city:
-            city = "İstanbul"
-
-        query = f"weather in {city}"
-        url = f"https://www.google.com/search?q={quote_plus(query)}"
+        result = await agent.execute(task)
+        
+        if result.status == TaskStatus.SUCCESS:
+            return result.output
+            
+        # Fallback to browser if agent fails completely
+        import webbrowser
+        from urllib.parse import quote_plus
+        city = user_input.replace("hava durumu", "").replace("weather", "").strip() or "İstanbul"
+        url = f"https://www.google.com/search?q=weather+in+{quote_plus(city)}"
         try:
             webbrowser.open(url)
-            return f"🌤 {city} için hava durumu tarayıcıda açıldı."
+            return f"🌤 {city} için hava durumu tarayıcıda açıldı (Aracı yanıt veremedi)."
         except Exception as e:
-            return f"Tarayıcı açılamadı: {e}"
+            return f"Hava durumu sorgusu başarısız: {e}"
 
     async def _execute_system_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
         """Return system info (CPU, RAM, disk, time)."""
@@ -764,7 +871,21 @@ class Orchestrator:
                 parts.append(f"💿 Disk: okunamadı ({e})")
 
         if any(kw in input_lower for kw in ["saat", "time", "tarih", "date"]):
-            parts.append(f"🕐 Şu an: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}")
+            # Detect if this is a world clock request (e.g., "time in X", "X saat kaç")
+            # If there are more than 2 words or specific keywords, route to ResearcherAgent
+            is_query = any(w in input_lower for w in ["kaç", "nedir", "in", "da", "de", "nde", "nda"])
+            words = input_lower.split()
+            
+            if (is_query and len(words) >= 2) or len(words) > 3:
+                 agent = self.agents[AgentRole.RESEARCHER]
+                 task = Task(description=user_input, intent="time")
+                 result = await agent.execute(task)
+                 if result.status == TaskStatus.SUCCESS:
+                     parts.append(result.output)
+                 else:
+                     parts.append(f"🕐 Yerel Saat: {datetime.now().strftime('%H:%M:%S')}")
+            else:
+                parts.append(f"🕐 Yerel Saat: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}")
 
         if any(kw in input_lower for kw in ["batarya", "battery", "şarj"]):
             try:
@@ -786,9 +907,78 @@ class Orchestrator:
             parts.append(f"🖥 CPU: %{cpu}")
             parts.append(f"💾 RAM: {mem.percent}% ({mem.used // (1024**3)}/{mem.total // (1024**3)} GB)")
             parts.append(disk_line)
-            parts.append(f"🕐 Saat: {datetime.now().strftime('%H:%M:%S')}")
 
         return "\n".join(parts)
+
+    async def _execute_whatsapp_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
+        """Extract contact/message and send via WhatsAppAgent."""
+        extraction_prompt = [
+            {"role": "system", "content": "Extract the 'contact' (person name) and the 'message' text from the user input. Return ONLY JSON: {\"contact\": \"name\", \"message\": \"text\"}"},
+            {"role": "user", "content": user_input}
+        ]
+        try:
+            resp = await self.llm_router.chat(extraction_prompt, max_tokens=150)
+            json_match = re.search(r"\{[\s\S]*\}", resp.content)
+            if not json_match:
+                return "WhatsApp için kişi veya mesaj içeriği anlaşılamadı."
+            
+            data = json.loads(json_match.group())
+            contact = data.get("contact")
+            message = data.get("message")
+            
+            if not contact or not message:
+                return "Kişi ismi veya mesaj metni eksik."
+            
+            agent = self.agents[AgentRole.WHATSAPP]
+            task = Task(
+                description=f"WhatsApp üzerinden {contact} kişisine '{message}' mesajını gönder.",
+                context={"contact": contact, "message": message}
+            )
+            result = await agent.execute(task)
+            return result.output or result.error
+        except Exception as e:
+            return f"WhatsApp mesajı gönderilirken hata oluştu: {e}"
+
+    async def _execute_architect_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
+        """High-level architecture task: Plan and build a complex project."""
+        context = {
+            "is_architect": True,
+            "project_mode": True,
+            "allow_filesystem": True,
+            "lesson_context": lesson_context,
+            "requires_tests": True
+        }
+        await self.event_bus.publish("notification", {"message": "🏗️ Proje mimarisi oluşturuluyor, bu biraz zaman alabilir..."})
+        return await self._execute_autonomous_task(user_input, {"type": "autonomous", "context": context}, lesson_context)
+
+    async def _execute_discovery_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
+        """Search and install new skills from ClawHub/GitHub."""
+        query = user_input.replace("skill bul", "").replace("yetenek ekle", "").replace("install skill", "").strip()
+        if not query:
+            return "Lütfen ne tür bir yetenek aradığınızı belirtin (örn: 'spotify skill bul')."
+
+        await self.event_bus.publish("notification", {"message": f"🔍 '{query}' için ClawHub ve GitHub taranıyor..."})
+        
+        # 1. Search
+        claw_results = await self.discovery.search_clawhub(query)
+        gh_results = await self.discovery.search_github(query)
+        all_results = claw_results + gh_results
+        
+        if not all_results:
+            return f"Üzgünüm, '{query}' ile ilgili uygun bir MCP sunucusu veya yetenek bulunamadı."
+
+        # 2. Pick best (simulated - in real case, we might ask the user)
+        best = all_results[0]
+        
+        # 3. Install
+        success = await self.discovery.auto_install_server(best)
+        
+        if success:
+            # Refresh bridge tools
+            await self.mcp_bridge.refresh_tool_catalog()
+            return f"✅ Yeni yetenek başarıyla eklendi: **{best['name']}** ({best['source']})\nArtık '{query}' ile ilgili istekleri yerine getirebilirim! 🚀"
+        else:
+            return f"❌ '{best['name']}' yeteneği bulundu ama otomatik kurulum başarısız oldu. Manuel kurulum gerekebilir: {best['url']}"
 
     async def _execute_file_task(self, user_input: str, intent: dict, lesson_context: str) -> str:
         """Read, write, or list files."""
@@ -874,7 +1064,7 @@ class Orchestrator:
         task = Task(
             description=user_input,
             intent=intent_type,
-            context=ctx,
+            context={**ctx, "lesson_context": lesson_context},
         )
         result = await agent.execute(task)
         return result.output or result.error or "No RPA result"
@@ -1039,7 +1229,7 @@ class Orchestrator:
             logger.error("Agent execution error: %s", e)
             return f"❌ Ajan çalıştırılırken hata oluştu: {e}"
 
-    async def _general_chat(self, user_input: str, lesson_context: str) -> str:
+    async def _general_chat(self, user_input: str, lesson_context: str, history: list = None) -> str:
         """Chat response with prompt.txt, conversation history, and lesson context."""
         from pathlib import Path
         import os
@@ -1063,14 +1253,27 @@ class Orchestrator:
                 "Always respond in the same language the user writes in."
             )
 
-        # CRITICAL: Force Turkish language enforcement
-        lang_enforcement = (
-            "\n\nIMPORTANT LANGUAGE RULE:\n"
-            "The user communicates in Turkish. You MUST respond in Turkish ONLY. "
-            "NEVER use Chinese, Japanese, or any non-Turkish characters. "
-            "If you cannot express something in Turkish, use simple Turkish words. "
-            "This rule is ABSOLUTE and cannot be overridden."
+        # Detect user language (Turkish vs English) instead of hardcoding
+        import re
+        turkish_chars = re.findall(r'[çğıöşüÇĞİÖŞÜ]', user_input)
+        is_turkish = len(turkish_chars) > 0 or any(
+            w in user_input.lower() for w in ("nasıl", "nedir", "bana", "bir", "merhaba", "selam", "tamam", "evet")
         )
+
+        if is_turkish:
+            lang_enforcement = (
+                "\n\nDİL VE ÜSLUP KURALLARI:\n"
+                "1. KESİNLİKLE Türkçe cevap ver. Yazım kurallarına (de/da ayrımı, noktalamalar vb.) kusursuz uy.\n"
+                "2. İnsansı, samimi ve zeki bir üslup kullan. Robotik cevaplardan kaçın.\n"
+                "3. Emojileri (😉, 🚀, ✨, 🔥 gibi) yerinde ve etkili kullanarak cevaplarını zenginleştir.\n"
+                "4. Eğer uygunsa, nükte ve hafif esprilerle sohbeti daha doğal hale getir.\n"
+                "5. Çince, Japonca veya alakasız yabancı karakterleri ASLA kullanma."
+            )
+        else:
+            lang_enforcement = (
+                "\n\nLANGUAGE: Respond in the same language the user uses. "
+                "Match their tone and formality level."
+            )
 
         # Build full system prompt with context
         parts = [system_text + lang_enforcement]
@@ -1079,17 +1282,52 @@ class Orchestrator:
         if lesson_context:
             parts.append(f"Lessons from past interactions:\n{lesson_context}")
 
-        # Add conversation history from memory
-        recent_lessons = self.memory.get_relevant_lessons(user_input, limit=2)
-        if recent_lessons:
-            lesson_texts = [l.get("fix", l.get("root_cause", "")) for l in recent_lessons if l]
-            if lesson_texts:
-                parts.append(f"Past relevant interactions:\n" + "\n".join(f"- {t}" for t in lesson_texts))
+        # Add conversation history from memory (semantic search for relevant context)
+        try:
+            recent_lessons = self.memory.get_relevant_lessons(user_input, limit=3)
+            if recent_lessons:
+                lesson_texts = [l.get("fix", l.get("root_cause", "")) for l in recent_lessons if l]
+                if lesson_texts:
+                    parts.append("Past relevant interactions:\n" + "\n".join(f"- {t}" for t in lesson_texts[:3]))
+        except Exception as e:
+            logger.debug("Memory retrieval for chat context failed: %s", e)
+
+        # Add recent episodic memory for continuity
+        try:
+            recent_episodes = self.memory.search(user_input, entry_type="episodic", limit=3)
+            if recent_episodes:
+                history_lines = []
+                for ep in recent_episodes[:3]:
+                    content = ep.get("content", "") if isinstance(ep, dict) else str(ep)
+                    if content and len(content) > 10:
+                        history_lines.append(content[:300])
+                if history_lines:
+                    parts.append("Recent conversation context:\n" + "\n".join(history_lines))
+        except Exception as e:
+            logger.debug("Episodic memory search failed: %s", e)
 
         messages = [
-            {"role": "system", "content": "\n\n".join(parts)},
-            {"role": "user", "content": user_input},
+            {"role": "system", "content": "\n\n".join(parts)}
         ]
+
+        # Add short-term conversational history for perfect logical reasoning
+        if history:
+            # Filter out the very last message if it's identical to user_input (to avoid duplication)
+            valid_history = []
+            for msg in history:
+                role = msg.get("role")
+                content = msg.get("content", "")
+                if role in ("user", "assistant") and content:
+                    valid_history.append({"role": role, "content": content})
+            
+            # Avoid duplicating the current user_input if it's already at the end of valid_history
+            if valid_history and valid_history[-1].get("role") == "user" and valid_history[-1].get("content") == user_input:
+                valid_history.pop()
+
+            messages.extend(valid_history)
+
+        # Finally, append the current user input
+        messages.append({"role": "user", "content": user_input})
 
         try:
             # Dynamic MCP injection (normal chat brain can self-initiate tool calls)

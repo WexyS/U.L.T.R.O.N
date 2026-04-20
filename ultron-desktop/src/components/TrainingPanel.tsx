@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, StopCircle, Download, RefreshCw, Cpu, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { API_URL } from '../config';
 
 interface TrainingJob {
   id: string;
@@ -42,7 +43,7 @@ export default function TrainingPanel() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v2/training/status');
+      const res = await fetch(`${API_URL}/api/v2/training/status`);
       if (!res.ok) throw new Error('Failed to fetch training status');
       const data = await res.json();
       setStatus(data);
@@ -53,7 +54,7 @@ export default function TrainingPanel() {
 
   const fetchJobs = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v2/training/jobs');
+      const res = await fetch(`${API_URL}/api/v2/training/jobs`);
       if (!res.ok) throw new Error('Failed to fetch jobs');
       const data = await res.json();
       setJobs(data.jobs);
@@ -76,7 +77,7 @@ export default function TrainingPanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:8000/api/v2/training/start', {
+      const res = await fetch(`${API_URL}/api/v2/training/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -108,7 +109,7 @@ export default function TrainingPanel() {
 
   const handleStopTraining = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v2/training/stop', {
+      const res = await fetch(`${API_URL}/api/v2/training/stop`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('Failed to stop training');
