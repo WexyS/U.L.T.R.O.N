@@ -22,19 +22,19 @@ if exist ".venv\Scripts\activate.bat" (
     call ".venv\Scripts\activate.bat"
     echo [+] Sanal ortam aktif edildi.
 ) else (
-    echo [-] HATA: .venv bulunamadı!
+    echo [-] HATA: .venv bulunamadi.
     pause & exit /b 1
 )
 
 :: [1.5/4] Check Ultron Brain
 echo [+] Ultron Brain (Port 8001) kontrol ediliyor...
 netstat -ano | findstr :8001 >nul 2>&1
-if !errorlevel! equ 0 (
+if %ERRORLEVEL% equ 0 (
     echo [OK] Ultron Brain aktif.
 ) else (
-    echo [!] UYARI: Ultron Brain (Port 8001) bulunamadi!
+    echo [?] UYARI: Ultron Brain (Port 8001) bulunamadi.
     echo     Lutfen Ultron Factory API'yi baslatin veya yerel modeli kontrol edin.
-    timeout /t 3 >nul
+    timeout /t 3
 )
 
 :: [2/4] Start Backend (Optimized)
@@ -50,7 +50,7 @@ set RETRY=0
     if !errorlevel! equ 0 goto BACKEND_OK
     set /a RETRY+=1
     if !RETRY! lss 30 goto HEALTH_LOOP
-    echo [-] HATA: Backend baslamadi! Lutfen port 8000'i kontrol edin.
+    echo [-] HATA: Backend baslamadi. Lutfen port 8000'i kontrol edin.
     pause & exit /b 1
 :BACKEND_OK
 echo [OK] Backend hazir.
@@ -63,7 +63,7 @@ start /b cmd /c "npm run dev"
 
 echo.
 echo ============================================================
-echo   ULTRON AGI SISTEMI AKTIF! ✨🚀
+echo   ULTRON AGI SISTEMI AKTIF. ✨🚀
 echo   Dashboard: https://127.0.0.1:5174
 echo ============================================================
 echo.
