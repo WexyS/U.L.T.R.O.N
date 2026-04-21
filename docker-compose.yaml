@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  ultron-backend:
+    build: .
+    container_name: ultron-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      - .env:/app/.env
+    restart: always
+    networks:
+      - ultron-network
+
+  ultron-frontend:
+    build:
+      context: ./ultron-desktop
+      dockerfile: Dockerfile
+    container_name: ultron-frontend
+    ports:
+      - "5174:5173"
+    depends_on:
+      - ultron-backend
+    networks:
+      - ultron-network
+
+networks:
+  ultron-network:
+    driver: bridge

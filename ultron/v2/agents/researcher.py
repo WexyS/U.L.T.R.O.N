@@ -235,28 +235,32 @@ class ResearcherAgent(Agent):
 
     async def _web_search(self, query: str) -> list[dict]:
         """Search the web using multiple backends with automatic fallback."""
-        # 1. Optimize query for search engine
+        # 1. Optimize query using LLM
         optimized_query = await self._optimize_query(query)
         logger.info("Optimized search query: '%s' -> '%s'", query, optimized_query)
 
         # 2. Try multiple search backends in order
-        results = await self._search_duckduckgo(optimized_query)
-        if results:
-            return results
-
-        # Fallback: Tavily API (if configured)
-        results = await self._search_tavily(optimized_query)
-        if results:
-            return results
-
-        # Fallback: Google Serper API (if configured)
-        results = await self._search_serper(optimized_query)
+        # Use the smart search wrapper (Tavily with DDG fallback)
+        results = await self._search(optimized_query)
         if results:
             return results
 
         # Last resort: construct known-good URLs
         logger.warning("All search backends failed, using fallback URLs")
         return self._construct_fallback_results(optimized_query)
+
+    async def _search(self, query: str) -> list[dict]:
+        """Smart search wrapper: tries Tavily first, falls back to DDG."""
+        # 1. Try Tavily
+        if os.getenv("TAVILY_API_KEY"):
+            from ultron.v2.skills.tavily_search import search_tavily
+            tavily_results = await search_tavily(query)
+            if tavily_results:
+                logger.info("Tavily returned %d results for: %s", len(tavily_results), query)
+                return tavily_results
+        
+        # 2. Fallback to DuckDuckGo
+        return await self._search_duckduckgo(query)
 
     async def _optimize_query(self, query: str) -> str:
         """Optimize a user query into clean search keywords."""
@@ -477,7 +481,7 @@ class ResearcherAgent(Agent):
                 city_resp = await self._llm_chat(extraction_prompt, max_tokens=20)
                 extracted_city = city_resp.content.strip().lower()
 
-                time_results = await self._search_duckduckgo(f"timezone for {extracted_city}")
+                time_results = await self._search(f"timezone for {extracted_city}")
                 if time_results:
                     # Use LLM to extract IANA timezone string (e.g. Europe/Paris)
                     tz_prompt = [
@@ -505,7 +509,7 @@ class ResearcherAgent(Agent):
         # ── Weather (Requires Internet) ──
         if any(kw in q for kw in ["hava", "weather", "derece", "yağmur"]):
             try:
-                weather_results = await self._search_duckduckgo(f"{query} weather report")
+                weather_results = await self._search(f"{query} weather report")
                 if weather_results:
                     return f"Hava Durumu Bilgisi ({query}):\n{weather_results[0].get('body', 'Veri alınamadı.')}"
             except Exception:

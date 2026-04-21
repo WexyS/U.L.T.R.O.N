@@ -11,6 +11,12 @@ echo.
 
 cd /d "%~dp0"
 
+:: [0/4] Cleanup Ghost Processes
+echo [+] Eski surecler temizleniyor...
+taskkill /F /IM python.exe /T >nul 2>&1
+taskkill /F /IM node.exe /T >nul 2>&1
+timeout /t 1 >nul
+
 :: [1/4] Activate Environment
 if exist ".venv\Scripts\activate.bat" (
     call ".venv\Scripts\activate.bat"
@@ -32,8 +38,8 @@ set RETRY=0
     curl -sf http://127.0.0.1:8000/health >nul 2>&1
     if !errorlevel! equ 0 goto BACKEND_OK
     set /a RETRY+=1
-    if !RETRY! lss 20 goto HEALTH_LOOP
-    echo [-] HATA: Backend baslamadi!
+    if !RETRY! lss 30 goto HEALTH_LOOP
+    echo [-] HATA: Backend baslamadi! Lutfen port 8000'i kontrol edin.
     pause & exit /b 1
 :BACKEND_OK
 echo [OK] Backend hazir.
@@ -47,13 +53,13 @@ start /b cmd /c "npm run dev"
 echo.
 echo ============================================================
 echo   ULTRON AGI SISTEMI AKTIF! ✨🚀
-echo   Dashboard: https://localhost:5174
+echo   Dashboard: https://127.0.0.1:5174
 echo ============================================================
 echo.
 
 :: Open Dashboard
 timeout /t 3 >nul
-start https://localhost:5174
+start https://127.0.0.1:5174
 
 :: Keep alive
 pause >nul

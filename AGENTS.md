@@ -43,11 +43,14 @@ It features a FastAPI backend, a React/Vite frontend, and integrates with numero
 
 - **Backend (`ultron/`):** FastAPI based. Main entry: `ultron.api.main:app`.
 - **Frontend (`ultron-desktop/`):** React/TypeScript/Vite.
-- **Agents (`ultron/v2/agents/`):** 11 specialized agents. Task routing by an orchestrator.
-- **Memory (`ultron/v2/memory/`):** 3-layer system (Working, Long-Term, Procedural) using SQLite + ChromaDB.
-- **MCP Tool Bridge (`ultron/v2/mcp/bridge.py`):** Enables dynamic tool injection. Use `ULTRON_MCP_ALLOWED_SERVERS` and `ultron/v2/core/security.py` for path/server allowlists.
-- **AI Providers:** Configured via `.env`. Smart routing for `fast`, `code`, `long`, `cheap` task types. Ollama is default local LLM.
-- **Configuration:** `.env` for API keys and URLs; `config/agents.yaml` for agent-specific settings.
+- **Agents (`ultron/v2/agents/`)**: 11 specialized agents. Task routing is now handled by the **ReActOrchestrator (v3.0)**.
+- **ReActOrchestrator (v3.0)**: The central AGI brain. Uses Reason+Act loops, Chain-of-Thought (CoT), and real-time reflection to coordinate agents.
+- **Emotional Intelligence (EQ)**: A dedicated sentiment analysis layer that adapts responses based on user mood (CHILL, STRESSED, etc.).
+- **Memory (`ultron/v2/memory/`)**: 3-layer system (Working, Long-Term, Procedural) + **UserProfileManager** for persistent relationship tracking.
+- **Event Bus (`ultron/v2/core/event_bus.py`)**: Unified bridge for cross-agent communication and frontend real-time updates.
+- **MCP Tool Bridge (`ultron/v2/mcp/bridge.py`)**: Enables dynamic tool injection. Use `ULTRON_MCP_ALLOWED_SERVERS` and `ultron/v2/core/security.py` for path/server allowlists.
+- **AI Providers**: Configured via `.env`. Smart routing for `fast`, `code`, `long`, `cheap` task types. Ollama is default local LLM.
+- **Configuration**: `.env` for API keys and URLs; `config/agents.yaml` for agent-specific settings.
 
 ## Ultron Factory Project Guidelines
 

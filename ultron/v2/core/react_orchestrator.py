@@ -12,6 +12,7 @@ from ultron.v2.core.base_agent import BaseAgent, AgentTask, AgentResult, AgentSt
 from ultron.v2.core.agent_registry import registry
 from ultron.v2.core.event_bus import event_bus
 from ultron.v2.core.llm_router import router
+from ultron.v2.memory.user_profile_manager import manager as user_profile
 
 logger = logging.getLogger("ultron.orchestrator")
 
@@ -50,9 +51,24 @@ class ReActOrchestrator(BaseAgent):
         start_time = datetime.now()
 
         try:
-            # 1. PERCEIVE & THINK
+            # 0. RECALL & LEARN
+            user_context = user_profile.get_summary_for_prompt()
+            task.context["user_profile"] = user_context
+            
+            lesson_context = ""
+            if self.memory:
+                lesson_context = self.memory.get_lesson_context(task.input_data)
+                if lesson_context:
+                    logger.info("Orchestrator found relevant lessons in memory.")
+                    task.context["lesson_context"] = lesson_context
+
+            # 1. PERCEIVE, THINK & ANALYZE MOOD
             thought = await self._think(task)
-            self.chain.steps.append(ReActStep("think", thought))
+            sentiment = await self._analyze_sentiment(task.input_data)
+            task.context["current_mood"] = sentiment
+            logger.info(f"Detected user sentiment: {sentiment}")
+            
+            self.chain.steps.append(ReActStep("think", f"[Mood: {sentiment}] {thought}"))
             await self._emit_step(self.chain.steps[-1])
 
             # 2. DECOMPOSE & PLAN
@@ -88,6 +104,12 @@ class ReActOrchestrator(BaseAgent):
             # 5. RESPOND
             final_response = await self._generate_final_response(task, self.chain.steps)
             
+            # 6. LEARN FROM INTERACTION (Priority 2: User Profiling)
+            asyncio.create_task(user_profile.update_from_interaction(
+                task.input_data, final_response, 
+                llm_callable=lambda p: router.generate(p, model_type="fast")
+            ))
+            
             latency = (datetime.now() - start_time).total_seconds() * 1000
             return AgentResult(
                 task_id=task.task_id,
@@ -115,16 +137,28 @@ class ReActOrchestrator(BaseAgent):
     # ── Internal Reasoning Methods ────────────────────────────────────────
 
     async def _think(self, task: AgentTask) -> str:
+        agents_info = "\n".join([f"- {a['name']}: {a['description']}" for a in registry.list_agents()])
         prompt = [
-            {"role": "system", "content": "You are the ULTRON v3.0 AGI Brain. Analyze the user request and think step-by-step how to solve it using specialized agents."},
+            {"role": "system", "content": (
+                "You are the ULTRON v3.0 AGI Brain. Analyze the user request and think step-by-step how to solve it.\n"
+                "You have access to the following specialized agents:\n"
+                f"{agents_info}\n\n"
+                "Think about which agents are needed and in what order."
+            )},
             {"role": "user", "content": f"Task: {task.input_data}\nContext: {task.context}"}
         ]
         resp = await router.chat(prompt)
         return resp.content
 
     async def _plan(self, task: AgentTask, thought: str) -> List[Dict[str, Any]]:
+        agents_names = ", ".join([a['name'] for a in registry.list_agents()])
         prompt = [
-            {"role": "system", "content": "Based on the thought process, create an execution plan as a JSON list of subtasks. Each subtask: {agent_name, description, input_data, parallel: bool}."},
+            {"role": "system", "content": (
+                "Based on the thought process, create an execution plan as a JSON list of subtasks.\n"
+                f"Available Agents: [{agents_names}]\n\n"
+                "Each subtask MUST use one of the available agents.\n"
+                "Format: [{\"agent_name\": \"...\", \"description\": \"...\", \"input_data\": \"...\", \"parallel\": bool}]"
+            )},
             {"role": "user", "content": f"Thought: {thought}"}
         ]
         resp = await router.chat(prompt)
@@ -132,7 +166,16 @@ class ReActOrchestrator(BaseAgent):
             # Extract JSON from response
             match = re.search(r"\[[\s\S]*\]", resp.content)
             if match:
-                return json.loads(match.group())
+                plan = json.loads(match.group())
+                # Validation: Ensure agents exist
+                valid_plan = []
+                available = [a['name'] for a in registry.list_agents()]
+                for step in plan:
+                    if step.get("agent_name") in available:
+                        valid_plan.append(step)
+                    else:
+                        logger.warning(f"Orchestrator planned unknown agent: {step.get('agent_name')}. Skipping step.")
+                return valid_plan
             return []
         except Exception:
             logger.warning("Failed to parse plan JSON. Using fallback.")
@@ -186,17 +229,53 @@ class ReActOrchestrator(BaseAgent):
 
     async def _reflect(self, task: AgentTask, steps: List[ReActStep]) -> str:
         history = "\n".join([f"{s.step_type.upper()}: {s.content[:300]}" for s in steps])
+        user_profile = task.context.get("user_profile", "")
+        lesson_context = task.context.get("lesson_context", "")
+        
+        system_prompt = (
+            "Reflect on the actions so far. Is the task complete? "
+            "If yes, include 'TASK_COMPLETE'. If not, explain missing steps.\n"
+            f"CONSIDER USER PROFILE: {user_profile}\n"
+            f"RELEVANT LESSONS: {lesson_context}"
+        )
+        
         prompt = [
-            {"role": "system", "content": "Reflect on the research/actions so far. Is the task complete? If yes, include 'TASK_COMPLETE' in your response. If not, explain what is missing."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Original Goal: {task.input_data}\nHistory:\n{history}"}
         ]
         resp = await router.chat(prompt)
         return resp.content
 
+    async def _analyze_sentiment(self, text: str) -> str:
+        """Detects the user's emotional tone to adapt the response."""
+        prompt = (
+            "Analyze the emotional tone of this message. Return ONLY ONE word "
+            "from this list: [CHILL, STRESSED, CURIOUS, ANGRY, EXCITED, CONFUSED].\n\n"
+            f"TEXT: {text}"
+        )
+        try:
+            resp = await router.chat([{"role": "user", "content": prompt}])
+            return resp.content.strip().upper()
+        except Exception:
+            return "CHILL"
+
     async def _generate_final_response(self, task: AgentTask, steps: List[ReActStep]) -> str:
         history = "\n".join([f"{s.step_type.upper()}: {s.content}" for s in steps])
+        user_profile = task.context.get("user_profile", "")
+        mood = task.context.get("current_mood", "CHILL")
+        
+        system_prompt = (
+            "You are ULTRON, a sophisticated and loyal AGI assistant. "
+            "Provide the final response based on the orchestration process.\n"
+            f"ADAPT TO USER PROFILE: {user_profile}\n"
+            f"CURRENT USER MOOD: {mood}\n"
+            "If the user is STRESSED, be more concise and supportive. "
+            "If the user is EXCITED, share their enthusiasm. "
+            "If the user is ANGRY, be ultra-professional and solution-oriented."
+        )
+        
         prompt = [
-            {"role": "system", "content": "You are ULTRON. Provide the final, comprehensive response to the user based on the entire orchestration process."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"User Request: {task.input_data}\nProcess History:\n{history}"}
         ]
         resp = await router.chat(prompt)

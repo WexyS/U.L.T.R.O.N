@@ -716,9 +716,14 @@ class LLMRouter:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         tools: Optional[list[dict]] = None,
+        preferred_provider: Optional[str] = None,
     ) -> LLMResponse:
         """Chat with automatic fallback across providers."""
-        healthy = self.get_healthy_providers()
+        if preferred_provider and preferred_provider in self.providers:
+            healthy = [preferred_provider]
+        else:
+            healthy = self.get_healthy_providers()
+            
         if not healthy:
             raise RuntimeError("No LLM providers available. Is Ollama running?")
 

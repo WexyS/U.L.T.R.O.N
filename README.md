@@ -1,24 +1,22 @@
 <div align="center">
 
-# Ultron v2.1
+# Ultron AGI v3.0 — Evolution Edition
 
 <p>
-  <strong>An Advanced, Autonomous AI Assistant System</strong>
+  <strong>The Self-Evolving, Sentiment-Aware Autonomous AGI System</strong>
 </p>
 
 <p>
-  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
-  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Playwright-Autonomous-2DAD6F?style=for-the-badge&logo=playwright&logoColor=white" alt="Playwright">
-  <img src="https://img.shields.io/badge/13%20AI%20Providers-Multi--AI-purple?style=for-the-badge" alt="Providers">
-  <img src="https://img.shields.io/badge/Autonomous%20Learning-Yes-brightgreen?style=for-the-badge" alt="Autonomous">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/ReAct-Orchestrator-red?style=for-the-badge" alt="ReAct">
+  <img src="https://img.shields.io/badge/Emotional%20Intelligence-EQ-pink?style=for-the-badge" alt="EQ">
+  <img src="https://img.shields.io/badge/Fine--Tuning-Ultron_Factory-orange?style=for-the-badge" alt="Factory">
 </p>
 
 <p>
-  <strong>Personal, locally-hosted, multi-agent AI assistant with autonomous workflows, web research, tool use, and a modern interface.</strong>
+  <strong>A self-correcting, locally-hosted AGI brain featuring a multi-agent ReAct loop, deep research via Tavily, and autonomous fine-tuning capabilities.</strong>
 </p>
 
 <p>
@@ -40,10 +38,12 @@
 
 Ultron is a multi-agent assistant designed for **local-first workflows**, **tool use**, and **extensible integrations**:
 
-- **Multi-agent orchestration**: route tasks to specialized agents (code, research, RPA, email, files, monitoring).
-- **Tool-assisted reasoning**: structured tool loops (MCP + internal tools) when the task benefits from it.
-- **Local memory**: persistent storage for lessons and episodic context.
-- **Safety & policy gates**: allowlists for file roots, optional server gates for MCP, and rate limiting/audit logging.
+- **ReAct Orchestration (v3.0)**: Advanced "Reason+Act" loops with step-by-step thinking, observation, and reflection.
+- **Emotional Intelligence (EQ)**: Real-time sentiment analysis adapts the AGI's personality and conciseness to the user's mood.
+- **Deep Research (Tavily)**: Integrated high-precision search with DuckDuckGo fallback for peer-reviewed quality research.
+- **Autonomous Self-Healing**: Agents detect their own failures and attempt to patch code or configurations in real-time.
+- **Ultron Factory Integration**: A dedicated environment for fine-tuning local LLMs (Qwen 2.5 Coder) to optimize the system's own brain.
+- **Local-First Safety**: Scoped file access, server allowlists, and constant-time security gates.
 
 ---
 
@@ -72,12 +72,20 @@ Ultron is a multi-agent assistant designed for **local-first workflows**, **tool
 | **MeetingAgent** | Live Whisper/VoiceBox transcription & TTS | Meeting notes |
 | **FilesAgent** | Directory monitoring & file organization | File management |
 
-### 🎙️ Extensible Ecosystem
-- **VoiceBox Native TTS**: Auto-detection and routing to localized [Jamie Pine VoiceBox](https://github.com/jamiepine/voicebox) for ultra-realistic speech with 0-latency EdgeTTS fallback.
-- **Auto Launchers**: Self-healing boot sequence that detects missing dependencies and automatically launches GUI companions like VoiceBox on startup.
-- **Ultron Vision Engine**: Native vision streaming and contextual assistance on Windows/Mac via proprietary vision protocol.
-- **Ultron Neural Lab (Factory)**: Integrated fine-tuning engine for local models, supporting LoRA, QLoRA, and full-parameter tuning.
-- **Multi-Agent Debate**: When facing complex decisions, ask Ultron to *"debate"* it; it will instantiate an Advocate, Critic, and Judge personas to rigorously argue technical trade-offs before synthesizing an optimal final response.
+### 🧬 AGI Evolution & Brain Construction
+Ultron v3.0 introduces a self-improvement cycle where the system can fine-tune its own neural weights.
+- **Brainv1 (Qwen 2.5 Coder 14B)**: The primary local model fine-tuned for specialized tool-calling and code orchestration.
+- **Emotional Resonance**: Uses a real-time sentiment layer to detect mood states (CHILL, STRESSED, CURIOUS, etc.) and modulates system prompts accordingly.
+- **LoRA Support**: Efficient training via **Ultron Factory**, allowing the AGI to learn new personas or skills without massive hardware requirements.
+
+### 🔍 Deep Research (Tavily Integration)
+The `ResearcherAgent` has been upgraded to a hybrid search engine:
+- **Tavily AI**: Primary search engine for high-precision, LLM-optimized results.
+- **DuckDuckGo**: Resilient fallback for broad or local web queries.
+- **Query Optimization**: Every search is pre-processed by the LLM to remove conversational noise and focus on high-intent keywords.
+
+### 🛡️ Autonomous Self-Healing
+If an agent fails due to a configuration or simple code error, the **ErrorAnalyzerAgent** captures the traceback, generates a fix, and applies it to the codebase automatically before retrying the task.
 
 ---
 

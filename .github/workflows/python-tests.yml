@@ -1,0 +1,39 @@
+name: Ultron CI - Backend Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    services:
+      chromadb:
+        image: chromadb/chroma:latest
+        ports:
+          - 8000:8000
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run Tests
+      env:
+        OLLAMA_BASE_URL: http://localhost:11434
+      run: |
+        pytest tests/v2/test_personality.py
+        pytest tests/test_system.py

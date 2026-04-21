@@ -34,13 +34,18 @@ async def chat_ws(ws: WebSocket):
                 logger.warning("[%s] Receive error: %s", conn_id, e)
                 break
 
+            # Handle ping/heartbeat messages
+            if data.get("type") == "ping":
+                await ws_manager.send_json(conn_id, {"type": "pong"})
+                continue
+
             message = data.get("message", "").strip()
             mode = data.get("mode", "chat")
             history = data.get("history", [])
             conversation_id = data.get("conversation_id")
 
             if not message:
-                await ws_manager.send_json(conn_id, {"type": "error", "content": "Empty message"})
+                # If it's not a ping and has no message, just ignore it
                 continue
 
             # Persistence: Save user message
