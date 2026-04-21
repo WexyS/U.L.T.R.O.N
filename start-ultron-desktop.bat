@@ -1,6 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
-title Ultron AGI — Unified Master Launcher
+title Ultron AGI - Unified Master Launcher
 color 0B
 
 echo.
@@ -11,51 +10,52 @@ echo.
 
 cd /d "%~dp0"
 
-:: [0/4] Cleanup Ghost Processes
+:: [0/4] Cleanup
 echo [+] Eski surecler temizleniyor...
 taskkill /F /IM python.exe /T >nul 2>&1
 taskkill /F /IM node.exe /T >nul 2>&1
 timeout /t 1 >nul
 
-:: [1/4] Activate Environment
+:: [1/4] Environment
 if exist ".venv\Scripts\activate.bat" (
     call ".venv\Scripts\activate.bat"
-    echo [+] Sanal ortam aktif edildi.
+    echo [+] Sanal ortam aktif.
 ) else (
     echo [-] HATA: .venv bulunamadi.
-    pause & exit /b 1
+    pause
+    exit /b 1
 )
 
-:: [1.5/4] Check Ultron Brain
-echo [+] Ultron Brain (Port 8001) kontrol ediliyor...
+:: [1.5/4] Brain Check
+echo [+] Ultron Brain (8001) kontrol ediliyor...
 netstat -ano | findstr :8001 >nul 2>&1
-if %ERRORLEVEL% equ 0 (
+if not errorlevel 1 (
     echo [OK] Ultron Brain aktif.
 ) else (
-    echo [?] UYARI: Ultron Brain (Port 8001) bulunamadi.
-    echo     Lutfen Ultron Factory API'yi baslatin veya yerel modeli kontrol edin.
-    timeout /t 3
+    echo [?] UYARI: Ultron Brain bulunamadi.
 )
 
-:: [2/4] Start Backend (Optimized)
-echo [+] Backend (Port 8000) baslatiliyor...
-start "Ultron Backend" /min cmd /k "python -m uvicorn ultron.api.main:app --host 0.0.0.0 --port 8000 --no-access-log --workers 1"
+:: [2/4] Backend
+echo [+] Backend (8000) baslatiliyor...
+:: Start backend in a visible window for debugging if it fails
+start "Ultron Backend" cmd /k "python -m uvicorn ultron.api.main:app --host 0.0.0.0 --port 8000"
 
-:: [3/4] Wait for Backend
+:: [3/4] Wait
 echo [+] Backend bekleniyor...
 set RETRY=0
 :HEALTH_LOOP
-    timeout /t 1 /nobreak >nul
+    timeout /t 2 /nobreak >nul
     curl -sf http://127.0.0.1:8000/health >nul 2>&1
-    if !errorlevel! equ 0 goto BACKEND_OK
+    if not errorlevel 1 goto BACKEND_OK
     set /a RETRY+=1
-    if !RETRY! lss 30 goto HEALTH_LOOP
-    echo [-] HATA: Backend baslamadi. Lutfen port 8000'i kontrol edin.
-    pause & exit /b 1
+    if %RETRY% lss 20 goto HEALTH_LOOP
+    echo [-] HATA: Backend baslamadi.
+    pause
+    exit /b 1
 :BACKEND_OK
 echo [OK] Backend hazir.
 
-:: [4/4] Start Voice & Frontend
+:: [4/4] Others
 echo [+] Sesli asistan ve Arayuz baslatiliyor...
 start "Ultron Voice" /min cmd /c "python -m ultron.voice_app"
 cd ultron-desktop
@@ -63,14 +63,10 @@ start /b cmd /c "npm run dev"
 
 echo.
 echo ============================================================
-echo   ULTRON AGI SISTEMI AKTIF. ✨🚀
-echo   Dashboard: https://127.0.0.1:5174
+echo   ULTRON AGI SISTEMI AKTIF. 
 echo ============================================================
 echo.
 
-:: Open Dashboard
 timeout /t 3 >nul
 start https://127.0.0.1:5174
-
-:: Keep alive
-pause >nul
+pause

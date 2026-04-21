@@ -701,7 +701,13 @@ class LLMRouter:
                 if hasattr(provider, 'is_configured'):
                     available = provider.is_configured()
                 else:
-                    available = provider.is_available()
+                    import inspect
+                    if inspect.iscoroutinefunction(provider.is_available):
+                        # For async BaseProviders, we assume available here.
+                        # The actual chat() call has its own fallback logic.
+                        available = True
+                    else:
+                        available = provider.is_available()
                 
                 if available:
                     healthy.append(name)
