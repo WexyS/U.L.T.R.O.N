@@ -118,9 +118,13 @@ class ConversationStore:
             """)
 
     def _get_conn(self) -> sqlite3.Connection:
-        """Get a database connection with WAL mode for concurrent access."""
+        """Get a database connection with performance optimizations."""
         conn = sqlite3.connect(str(self.db_path), timeout=10)
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA cache_size=-32000")   # 32MB cache
+        conn.execute("PRAGMA synchronous=NORMAL")  # Balance between speed and safety
+        conn.execute("PRAGMA temp_store=MEMORY")   # Use RAM for temp tables
+        conn.execute("PRAGMA mmap_size=268435456") # 256MB memory map
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
         return conn

@@ -155,6 +155,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                   value={settings.model}
                   onChange={(e) => handleChange('model', e.target.value)}
                 >
+                  <option value="brain">Ultron Brain (Local 14B) ✨</option>
                   <option value="qwen2.5-coder:14b">Qwen 2.5 Coder 14B (Fast)</option>
                   <option value="qwen3-coder:30b">Qwen 3 Coder 30B (Genius)</option>
                   <option value="qwen2.5:32b">Qwen 2.5 32B (Balanced)</option>

@@ -16,8 +16,18 @@ class EpisodicMemory:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
+    async def _get_db(self):
+        """Asenkron veritabanı bağlantısı ve performans ayarları."""
+        db = await aiosqlite.connect(self.db_path, timeout=30)
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA cache_size=-32000")
+        await db.execute("PRAGMA synchronous=NORMAL")
+        await db.execute("PRAGMA temp_store=MEMORY")
+        await db.execute("PRAGMA mmap_size=268435456")
+        return db
+
     async def initialize(self):
-        async with aiosqlite.connect(self.db_path) as db:
+        async with await self._get_db() as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS episodes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +43,7 @@ class EpisodicMemory:
 
     async def store(self, event_type: str, content: str, agent_id: str = None, outcome: str = None, metadata: Dict[str, Any] = None):
         """Store a new episode."""
-        async with aiosqlite.connect(self.db_path) as db:
+        async with await self._get_db() as db:
             await db.execute(
                 "INSERT INTO episodes (timestamp, event_type, agent_id, content, outcome, metadata) VALUES (?, ?, ?, ?, ?, ?)",
                 (datetime.now().isoformat(), event_type, agent_id, content, outcome, json.dumps(metadata or {}))
@@ -42,7 +52,7 @@ class EpisodicMemory:
 
     async def get_recent(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retrieve recent episodes."""
-        async with aiosqlite.connect(self.db_path) as db:
+        async with await self._get_db() as db:
             async with db.execute("SELECT * FROM episodes ORDER BY id DESC LIMIT ?", (limit,)) as cursor:
                 rows = await cursor.fetchall()
                 return [
@@ -56,7 +66,7 @@ class EpisodicMemory:
 
     async def search(self, query: str) -> List[Dict[str, Any]]:
         """Simple text search over episodes."""
-        async with aiosqlite.connect(self.db_path) as db:
+        async with await self._get_db() as db:
             async with db.execute("SELECT * FROM episodes WHERE content LIKE ? OR event_type LIKE ?", (f"%{query}%", f"%{query}%")) as cursor:
                 rows = await cursor.fetchall()
                 return [

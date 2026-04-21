@@ -89,6 +89,7 @@ class LLMProvider(ABC):
             "mistral": "Ultron Euro-Neural Node",
             "cohere": "Ultron Contextual Node",
             "fireworks": "Ultron Burst Intelligence",
+            "brain": "Ultron Neural Brain (Local 14B)",
         }
         return mapping.get(self.name, f"Ultron-Channel-{self.name.capitalize()}")
 
@@ -449,6 +450,7 @@ class LLMRouter:
         openai_api_key: Optional[str] = None,
         ollama_base_url: Optional[str] = None,
         vllm_base_url: str = "http://localhost:8000/v1",
+        brain_url: str = "http://localhost:8001/v1",
     ) -> None:
         # Normalize model names to handle common mismatches
         if ollama_model == "qwen3.0-coder:30b":
@@ -456,7 +458,16 @@ class LLMRouter:
         self.providers: dict[str, LLMProvider] = {}
         self.priority_order: list[str] = []
 
-        # Always add Ollama (default local)
+        # 0. Add Brain Provider (Highest priority fine-tuned model)
+        try:
+            from ultron.v2.providers.brain_provider import BrainProvider
+            self.providers["brain"] = BrainProvider()
+            self.priority_order.append("brain")
+            logger.info("Ultron Brain (14B) integrated into router.")
+        except Exception as e:
+            logger.warning("Could not integrate BrainProvider: %s", e)
+
+        # 1. Always add Ollama (default local)
         self.providers["ollama"] = OllamaProvider(
             model=ollama_model,
             base_url=ollama_base_url,
@@ -609,8 +620,9 @@ class LLMRouter:
         if env.get("TOGETHER_API_KEY"):
             self.enable_together(env["TOGETHER_API_KEY"])
         # Hugging Face
-        if env.get("HF_API_KEY"):
-            self.enable_huggingface(env["HF_API_KEY"])
+        hf_token = env.get("HF_TOKEN") or env.get("HF_API_KEY") or env.get("HUGGING_FACE_HUB_TOKEN")
+        if hf_token:
+            self.enable_huggingface(hf_token)
         # DeepSeek
         if env.get("DEEPSEEK_API_KEY"):
             from ultron.v2.providers.extra_providers import DeepSeekProvider

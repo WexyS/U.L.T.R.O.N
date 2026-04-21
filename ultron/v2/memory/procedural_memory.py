@@ -157,6 +157,10 @@ class ProceduralMemory:
         self._db.row_factory = aiosqlite.Row  # type: ignore[assignment]
 
         await self._db.execute("PRAGMA journal_mode=WAL;")
+        await self._db.execute("PRAGMA cache_size=-32000;")
+        await self._db.execute("PRAGMA synchronous=NORMAL;")
+        await self._db.execute("PRAGMA temp_store=MEMORY;")
+        await self._db.execute("PRAGMA mmap_size=268435456;")
         await self._db.execute("PRAGMA foreign_keys=ON;")
         await self._db.execute(_CREATE_TABLE_SQL)
         await self._db.commit()

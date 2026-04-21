@@ -1,9 +1,9 @@
-"""RPA Operator Agent — computer use via mouse, keyboard, and screen control."""
-
+import asyncio
 import base64
 import logging
 import webbrowser
 from pathlib import Path
+from typing import Any, Callable
 
 from ultron.v2.agents.base import Agent
 from ultron.v2.core.types import AgentRole, AgentStatus, Task, TaskResult, TaskStatus, ToolCall
@@ -103,6 +103,11 @@ class RPAOperatorAgent(Agent):
                 self._easyocr = None
         return self._easyocr
 
+    async def _run_sync(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+        """Run blocking sync functions in the default executor to avoid event loop starvation."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: func(*args, **kwargs))
+
     async def execute(self, task: Task) -> TaskResult:
         """Execute an RPA task."""
         self.state.status = AgentStatus.BUSY
@@ -133,10 +138,9 @@ class RPAOperatorAgent(Agent):
             elif action == "weather":
                 result = await self._weather_report(task)
             elif action == "alt_tab":
-                import pyautogui
-                import time
-                pyautogui.hotkey('alt', 'tab')
-                time.sleep(1)
+                pyautogui = self._init_pyautogui()
+                await self._run_sync(pyautogui.hotkey, 'alt', 'tab')
+                await asyncio.sleep(1)
                 result = TaskResult(task_id=task.id, status=TaskStatus.SUCCESS,
                                    output="✅ alt+tab sent — window switched")
             elif action == "list_apps":
@@ -254,7 +258,8 @@ class RPAOperatorAgent(Agent):
         y = task.context.get("y")
 
         if x is not None and y is not None:
-            pyautogui.click(x, y)
+            pyautogui = self._init_pyautogui()
+            await self._run_sync(pyautogui.click, x, y)
             return TaskResult(
                 task_id=task.id,
                 status=TaskStatus.SUCCESS,
@@ -273,7 +278,8 @@ class RPAOperatorAgent(Agent):
         y = task.context.get("y", 0)
         duration = task.context.get("duration", 0.5)
 
-        pyautogui.moveTo(x, y, duration=duration)
+        pyautogui = self._init_pyautogui()
+        await self._run_sync(pyautogui.moveTo, x, y, duration=duration)
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.SUCCESS,
@@ -288,7 +294,8 @@ class RPAOperatorAgent(Agent):
         text = task.context.get("text", "")
         interval = task.context.get("interval", 0.05)  # Delay between keystrokes
 
-        pyautogui.typewrite(text, interval=interval)
+        pyautogui = self._init_pyautogui()
+        await self._run_sync(pyautogui.typewrite, text, interval=interval)
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.SUCCESS,
@@ -305,7 +312,8 @@ class RPAOperatorAgent(Agent):
             keys = keys.split("+")
 
         keys = [k.strip().lower() for k in keys]
-        pyautogui.hotkey(*keys)
+        pyautogui = self._init_pyautogui()
+        await self._run_sync(pyautogui.hotkey, *keys)
 
         return TaskResult(
             task_id=task.id,
@@ -324,7 +332,8 @@ class RPAOperatorAgent(Agent):
         y2 = task.context.get("y2", 0)
         duration = task.context.get("duration", 1.0)
 
-        pyautogui.drag(x2 - x1, y2 - y1, duration=duration)
+        pyautogui = self._init_pyautogui()
+        await self._run_sync(pyautogui.drag, x2 - x1, y2 - y1, duration=duration)
         return TaskResult(
             task_id=task.id,
             status=TaskStatus.SUCCESS,
@@ -444,24 +453,26 @@ class RPAOperatorAgent(Agent):
 
     async def _media_control(self, task: Task) -> TaskResult:
         """Control media playback (Play, Pause, Volume)."""
-        import pyautogui
+        pyautogui = self._init_pyautogui()
         action = task.context.get("media_action", "").lower()
         
         if "dur" in action or "pause" in action or "stop" in action:
-            pyautogui.press('playpause')
+            await self._run_sync(pyautogui.press, 'playpause')
             output = "⏸️ Medya durduruldu."
         elif "başlat" in action or "play" in action or "devam" in action:
-            pyautogui.press('playpause')
+            await self._run_sync(pyautogui.press, 'playpause')
             output = "▶️ Medya başlatıldı."
         elif "ses" in action and "aç" in action:
-            for _ in range(5): pyautogui.press('volumeup')
+            for _ in range(5): 
+                await self._run_sync(pyautogui.press, 'volumeup')
             output = "🔊 Ses artırıldı."
         elif "ses" in action and "kıs" in action:
-            for _ in range(5): pyautogui.press('volumedown')
+            for _ in range(5): 
+                await self._run_sync(pyautogui.press, 'volumedown')
             output = "🔉 Ses azaltıldı."
         else:
             # Try spacebar as fallback for focused video players
-            pyautogui.press('space')
+            await self._run_sync(pyautogui.press, 'space')
             output = "⌨️ Boşluk tuşu gönderildi (Play/Pause fallback)."
 
         return TaskResult(task_id=task.id, status=TaskStatus.SUCCESS, output=output)
@@ -625,7 +636,8 @@ class RPAOperatorAgent(Agent):
         if json_match:
             coords = json.loads(json_match.group())
             x, y = coords.get("x", 0), coords.get("y", 0)
-            pyautogui.click(x, y)
+            pyautogui = self._init_pyautogui()
+            await self._run_sync(pyautogui.click, x, y)
             return TaskResult(
                 task_id=task.id,
                 status=TaskStatus.SUCCESS,
@@ -793,8 +805,7 @@ class RPAOperatorAgent(Agent):
                         steps.append(f"❌ {app_to_open} başlatılamadı")
 
                     # Wait for app to appear and focus
-                    import time
-                    time.sleep(2)
+                    await asyncio.sleep(2)
                     
                     # Optional: Type text if requested in description
                     type_text = task.context.get("type_text") or task.context.get("text")

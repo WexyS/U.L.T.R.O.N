@@ -256,7 +256,7 @@ class TogetherProvider(BaseProvider):
 
 class HFProvider(BaseProvider):
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        ak = api_key or os.getenv("HF_API_KEY")
+        ak = api_key or os.getenv("HF_TOKEN") or os.getenv("HF_API_KEY") or os.getenv("HUGGING_FACE_HUB_TOKEN")
         md = model or os.getenv("HF_DEFAULT_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
         super().__init__(ProviderConfig(
             name="huggingface",

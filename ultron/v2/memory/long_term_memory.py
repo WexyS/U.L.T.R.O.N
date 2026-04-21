@@ -21,15 +21,27 @@ class LongTermMemory:
         self.chroma = chromadb.PersistentClient(path="data/chroma")
         self.collection = self.chroma.get_or_create_collection("ultron_memory")
 
-    @staticmethod
     def _fts_escape(query: str) -> str:
         """SQLite FTS5 MATCH içinde güvenli kullanım için çift tırnak kaçışı."""
         if not query:
             return '""'
         return query.replace('"', '""')
 
+    def _get_db(self):
+        """Asenkron veritabanı bağlantısı ve performans ayarları."""
+        return aiosqlite.connect(self.db_path, timeout=30)
+
+    async def _apply_pragmas(self, db: aiosqlite.Connection):
+        """SQLite performans optimizasyonlarını uygula."""
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA cache_size=-32000")   # 32MB
+        await db.execute("PRAGMA synchronous=NORMAL")
+        await db.execute("PRAGMA temp_store=MEMORY")
+        await db.execute("PRAGMA mmap_size=268435456")  # 256MB
+
     async def init(self):
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self._get_db() as db:
+            await self._apply_pragmas(db)
             await db.executescript("""
                 CREATE TABLE IF NOT EXISTS episodes (
                     id TEXT PRIMARY KEY, timestamp TEXT,
@@ -61,7 +73,8 @@ class LongTermMemory:
         )
         del emb
         gc.collect()
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self._get_db() as db:
+            await self._apply_pragmas(db)
             await db.execute(
                 "INSERT INTO episodes VALUES (?,?,?,?,?,?)",
                 (item_id, datetime.now().isoformat(), summary,
@@ -80,7 +93,8 @@ class LongTermMemory:
         del emb
         gc.collect()
         now = datetime.now().isoformat()
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self._get_db() as db:
+            await self._apply_pragmas(db)
             await db.execute(
                 "INSERT INTO facts VALUES (?,?,?,?,?)",
                 (item_id, content, source, confidence, now, now)
@@ -111,7 +125,8 @@ class LongTermMemory:
     async def forget_old(self, days: int = 90, importance_threshold: float = 0.2):
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
         decay_factor = 0.95
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self._get_db() as db:
+            await self._apply_pragmas(db)
             await db.execute(
                 "UPDATE episodes SET decay = decay * ? WHERE timestamp < ? AND importance < 0.5",
                 (decay_factor, cutoff)
@@ -168,7 +183,8 @@ class LongTermMemory:
         return dot / (norm_a * norm_b)
 
     async def stats(self) -> dict:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self._get_db() as db:
+            await self._apply_pragmas(db)
             async with db.execute("SELECT COUNT(*) FROM episodes") as c:
                 ep_count = (await c.fetchone())[0]
             async with db.execute("SELECT COUNT(*) FROM facts") as c:

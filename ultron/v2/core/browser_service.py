@@ -32,6 +32,11 @@ class BrowserService:
 
     async def scrape_url(self, url: str) -> Dict[str, Any]:
         """Scrape a URL and return content + metadata."""
+        from ultron.v2.core.ssrf_guard import ssrf_guard
+        if not ssrf_guard.is_url_safe(url):
+            logger.warning("SSRF: Blocked attempt to scrape unsafe URL: %s", url)
+            return {"url": url, "error": "Access denied: Unsafe or internal URL"}
+
         try:
             await self._init_playwright()
             page = await self._context.new_page()

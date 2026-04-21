@@ -7,16 +7,17 @@ from ultron.v2.providers.fallback_chain import FallbackChain
 
 # Görev tipi → provider öncelik sırası
 TASK_ROUTES = {
-    "fast": ["groq", "minimax", "ollama", "cloudflare", "together"],
-    "code": ["airllm", "ollama", "openrouter", "groq", "together"],
-    "long": ["airllm", "gemini", "openrouter", "ollama"],
-    "cheap": ["airllm", "ollama", "cloudflare", "hf", "groq"],
-    "creative": ["airllm", "openrouter", "ollama", "gemini"],
-    "search": ["openrouter", "gemini", "groq"],
-    "self_evolve": ["airllm", "minimax", "ollama", "openrouter"],
-    "deep_analysis": ["airllm", "ollama", "openrouter"],
-    "sleep_mode": ["airllm"],
+    "fast": ["brain", "groq", "minimax", "ollama", "cloudflare", "together"],
+    "code": ["brain", "airllm", "ollama", "openrouter", "groq", "together"],
+    "long": ["brain", "airllm", "gemini", "openrouter", "ollama"],
+    "cheap": ["brain", "airllm", "ollama", "cloudflare", "hf", "groq"],
+    "creative": ["brain", "airllm", "openrouter", "ollama", "gemini"],
+    "search": ["brain", "openrouter", "gemini", "groq"],
+    "self_evolve": ["brain", "airllm", "minimax", "ollama", "openrouter"],
+    "deep_analysis": ["brain", "airllm", "ollama", "openrouter"],
+    "sleep_mode": ["brain", "airllm"],
     "default": [
+        "brain",
         "airllm",
         "ollama",
         "groq",
@@ -48,18 +49,18 @@ class ProviderRouter:
         from ultron.v2.providers.openai_provider import OpenAIProvider
         from ultron.v2.providers.minimax_provider import MiniMaxProvider
         from ultron.v2.providers.airllm_provider import AirLLMProvider
+        from ultron.v2.providers.brain_provider import BrainProvider
 
-        # AirLLM Provider (highest priority - 70B/405B local)
+        # Brain Provider (Highest priority - Fine-tuned 14B)
         try:
-            airllm_provider = AirLLMProvider()
-            if airllm_provider.is_configured():
-                self.providers["airllm"] = airllm_provider
-                self.priority_order.append("airllm")
-                print(f"[Router] [OK] airllm aktif ({airllm_provider.config.default_model})")
-            else:
-                print(f"[Router] [X] airllm yüklü değil (pip install airllm)")
+            brain_provider = BrainProvider()
+            self.providers["brain"] = brain_provider
+            self.priority_order.append("brain")
+            print(f"[Router] [OK] Brain (Ultron 14B) aktif")
         except Exception as e:
-            print(f"[Router] [X] airllm yükleme hatası: {e}")
+            print(f"[Router] [X] Brain yükleme hatası: {e}")
+
+        # AirLLM Provider (high priority - 70B/405B local)
 
         for cls in [
             OllamaProvider,

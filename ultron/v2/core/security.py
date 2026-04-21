@@ -19,7 +19,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
+
+from .ssrf_guard import ssrf_guard
+from .prompt_guard import prompt_guard
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +206,14 @@ class SecurityManager:
             )
 
         return allowed
+
+    def is_url_safe(self, url: str) -> bool:
+        """Check if a URL is safe from SSRF."""
+        return ssrf_guard.is_url_safe(url)
+
+    def scan_prompt(self, prompt: str) -> Tuple[bool, str]:
+        """Scan a prompt for injection attacks."""
+        return prompt_guard.scan(prompt)
 
     def grant_permission(self, agent_name: str, permission: Permission) -> None:
         """Grant a permission to an agent (runtime only)."""

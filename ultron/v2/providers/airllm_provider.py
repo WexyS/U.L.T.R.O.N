@@ -46,7 +46,7 @@ class AirLLMProvider(BaseProvider):
         compression = os.getenv("AIRLLM_COMPRESSION", "4bit")
         prefetching = os.getenv("AIRLLM_PREFETCHING", "true").lower() == "true"
         self._max_length = int(os.getenv("AIRLLM_MAX_LENGTH", "4096"))
-        self._hf_token = os.getenv("HUGGING_FACE_HUB_TOKEN") or os.getenv("HF_TOKEN")
+        self._hf_token = os.getenv("HF_TOKEN") or os.getenv("HF_API_KEY") or os.getenv("HUGGING_FACE_HUB_TOKEN")
         
         config = ProviderConfig(
             name="airllm",

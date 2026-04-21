@@ -33,7 +33,8 @@ class DebateAgent(Agent):
             rounds = task.context.get("rounds", 2)
             
             logger.info(f"Starting Multi-Agent Debate on: {topic[:50]}...")
-            result_dict = await self.debate_engine.run_debate(topic=topic, rounds=rounds)
+            lesson_context = task.context.get("lesson_context", "")
+            result_dict = await self.debate_engine.run_debate(topic=topic, rounds=rounds, lesson_context=lesson_context)
             
             return TaskResult(
                 task_id=task.id, 

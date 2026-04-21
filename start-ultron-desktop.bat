@@ -26,6 +26,17 @@ if exist ".venv\Scripts\activate.bat" (
     pause & exit /b 1
 )
 
+:: [1.5/4] Check Ultron Brain
+echo [+] Ultron Brain (Port 8001) kontrol ediliyor...
+netstat -ano | findstr :8001 >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [OK] Ultron Brain aktif.
+) else (
+    echo [!] UYARI: Ultron Brain (Port 8001) bulunamadi!
+    echo     Lutfen Ultron Factory API'yi baslatin veya yerel modeli kontrol edin.
+    timeout /t 3 >nul
+)
+
 :: [2/4] Start Backend (Optimized)
 echo [+] Backend (Port 8000) baslatiliyor...
 start "Ultron Backend" /min cmd /k "python -m uvicorn ultron.api.main:app --host 0.0.0.0 --port 8000 --no-access-log --workers 1"

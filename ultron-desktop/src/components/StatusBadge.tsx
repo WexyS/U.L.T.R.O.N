@@ -51,6 +51,14 @@ export default function StatusBadge({ status, providers, isConnected }: StatusBa
         <span className="text-xs">{activeProviders.length}</span>
       </div>
 
+      {/* Brain Status */}
+      {activeProviders.includes('brain') && (
+        <div className="flex items-center gap-1.5 text-ultron-accent animate-pulse" title="Ultron Brain is Active">
+          <Activity className="w-3.5 h-3.5" />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Brain</span>
+        </div>
+      )}
+
       {/* Memory */}
       {status.memory && (
         <div className="flex items-center gap-1.5 text-ultron-textMuted" title={`${status.memory.vector_entries || 0} vector entries`}>

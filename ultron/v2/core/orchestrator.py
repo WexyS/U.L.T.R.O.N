@@ -43,6 +43,7 @@ from ultron.v2.mcp.lifecycle import MCPClusterManager
 from ultron.v2.mcp.loader import load_mcp_settings
 from ultron.v2.core.nexus import UltronNexus
 from ultron.v2.core.knowledge import LocalKnowledgeEngine
+from ultron.v2.core.context import context_manager
 
 logger = logging.getLogger(__name__)
 
@@ -447,10 +448,11 @@ class Orchestrator:
         Args:
             _depth: Internal recursion guard. Do not set externally.
         """
-        # SECURITY FIX: Prevent infinite recursion on complex multi-task chains
-        if _depth > 10:
-            logger.warning("Recursion depth exceeded (depth=%d) for input: %s", _depth, user_input[:100])
-            return f"Task is too complex to process (depth limit reached). Please simplify your request."
+        # SECURITY: Scan for prompt injection
+        is_malicious, reason = self.security.scan_prompt(user_input)
+        if is_malicious:
+            logger.warning("SECURITY: Blocked prompt injection attempt. Reason: %s", reason)
+            return f"Güvenlik uyarısı: İsteğiniz potansiyel olarak zararlı bir kalıp içerdiği için reddedildi ({reason})."
 
         try:
             return await self._process_inner(user_input, context, _depth)
@@ -1596,6 +1598,9 @@ class Orchestrator:
 
         # Finally, append the current user input
         messages.append({"role": "user", "content": user_input})
+
+        # -- Step 3: Optimize Context --
+        messages = await context_manager.optimize_context(messages, self.llm_router)
 
         try:
             # Dynamic MCP injection (normal chat brain can self-initiate tool calls)
