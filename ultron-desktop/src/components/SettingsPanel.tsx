@@ -1,230 +1,254 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Settings, Bell, Shield, Cpu, Volume2, Globe, 
-  Moon, Sun, Save, RefreshCcw, Zap, Search
-} from 'lucide-react';
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 
-interface SettingsPanelProps {
-  onClose?: () => void;
+interface SettingsState {
+  darkMode: boolean
+  language: 'tr' | 'en'
+  streamingEnabled: boolean
+  ngrokEnabled: boolean
+  ngrokUrl: string
+  activeModel: string
+  daemonEnabled: boolean
+  promptGuard: boolean
 }
 
-export default function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const [settings, setSettings] = useState({
-    theme: localStorage.getItem('ultron-theme') || 'dark',
-    autonomousEvolution: localStorage.getItem('ultron-auto-evolution') === 'true',
-    voiceMode: localStorage.getItem('ultron-voice-mode') === 'true',
-    searchDepth: parseInt(localStorage.getItem('ultron-search-depth') || '2'),
-    model: localStorage.getItem('ultron-model') || 'qwen2.5:32b',
-    language: localStorage.getItem('ultron-language') || 'tr',
-    notifications: true,
-  });
+interface ProviderStatus {
+  name: string
+  model: string
+  available: boolean
+  latencyMs: number
+  error?: string
+}
 
-  const saveSettings = async () => {
-    localStorage.setItem('ultron-theme', settings.theme);
-    localStorage.setItem('ultron-auto-evolution', String(settings.autonomousEvolution));
-    localStorage.setItem('ultron-voice-mode', String(settings.voiceMode));
-    localStorage.setItem('ultron-search-depth', String(settings.searchDepth));
-    localStorage.setItem('ultron-model', settings.model);
-    localStorage.setItem('ultron-language', settings.language);
+export const SettingsPanel = ({ onClose }: { onClose: () => void }) => {
+  const [settings, setSettings] = useState<SettingsState>({
+    darkMode: true,
+    language: 'tr',
+    streamingEnabled: true,
+    ngrokEnabled: false,
+    ngrokUrl: '',
+    activeModel: 'brain',
+    daemonEnabled: true,
+    promptGuard: true,
+  })
+  
+  const [providers, setProviders] = useState<ProviderStatus[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'general' | 'providers' | 'agents' | 'security' | 'training'>('general')
 
-    // Sync with backend
-    try {
-      const response = await fetch('http://localhost:8000/api/v2/config/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: settings.model,
-          search_depth: settings.searchDepth,
-          autonomous_evolution: settings.autonomousEvolution
-        })
-      });
-      if (response.ok) {
-        alert('Settings saved and synced with Ultron Core! ✨');
-      } else {
-        alert('Settings saved locally, but backend sync failed.');
-      }
-    } catch (err) {
-      console.error('Failed to sync settings:', err);
-      alert('Settings saved locally. Backend is unreachable.');
-    }
-    
-    // Apply theme immediately
-    document.documentElement.className = settings.theme;
-  };
+  useEffect(() => {
+    fetch('http://localhost:8000/api/v2/providers/status')
+      .then(r => r.json())
+      .then(data => {
+        const ps: ProviderStatus[] = Object.entries(data).map(([name, s]: [string, any]) => ({
+          name,
+          model: s.model || 'unknown',
+          available: s.available,
+          latencyMs: s.latency_ms || 0,
+          error: s.error,
+        }))
+        setProviders(ps)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
 
-  const handleChange = (key: string, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
+  const toggle = (key: keyof SettingsState) => {
+    setSettings(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const TABS = [
+    { id: 'general', label: 'Genel', icon: '⚙' },
+    { id: 'providers', label: 'Providerlar', icon: '🌐' },
+    { id: 'agents', label: 'Ajanlar', icon: '⚡' },
+    { id: 'security', label: 'Güvenlik', icon: '🔒' },
+    { id: 'training', label: 'Eğitim', icon: '🧠' },
+  ] as const
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-zinc-950">
-      <div className="px-8 py-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
-            <Settings className="w-6 h-6" />
-          </div>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">System Settings</h2>
-        </div>
-        <button 
-          onClick={saveSettings}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
-        >
-          <Save className="w-4 h-4" />
-          Save Changes
-        </button>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      style={{
+        position: 'fixed',
+        top: '10%',
+        left: '10%',
+        right: '10%',
+        bottom: '10%',
+        background: 'var(--bg1)',
+        border: '1px solid var(--bd)',
+        borderRadius: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 200,
+        boxShadow: '0 20px 80px rgba(0,0,0,0.8)',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', padding: '20px 24px',
+        borderBottom: '1px solid var(--bd)', gap: 15, flexShrink: 0,
+        background: 'rgba(255,255,255,0.02)'
+      }}>
+        <button onClick={onClose} style={{
+          width: 36, height: 36, borderRadius: '10px',
+          background: 'var(--bg2)', border: '1px solid var(--bd)',
+          color: 'var(--t1)', cursor: 'pointer', fontSize: 18,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>←</button>
+        <span style={{ fontSize: '20px', fontWeight: 700 }}>Sistem Ayarları</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 space-y-10 scrollbar-premium">
-        {/* General Section */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-zinc-400 font-bold text-xs uppercase tracking-widest px-2">
-            <Globe className="w-4 h-4" />
-            General
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300">Appearance</span>
-                <div className="flex p-1 bg-zinc-200 dark:bg-zinc-800 rounded-lg">
-                  <button 
-                    onClick={() => handleChange('theme', 'light')}
-                    className={`p-1.5 rounded-md transition-all ${settings.theme === 'light' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}
-                  >
-                    <Sun className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => handleChange('theme', 'dark')}
-                    className={`p-1.5 rounded-md transition-all ${settings.theme === 'dark' ? 'bg-zinc-700 shadow-sm text-white' : 'text-zinc-500'}`}
-                  >
-                    <Moon className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <p className="text-xs text-zinc-500">Toggle between light and dark theme aesthetic.</p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300">Voice Mode</span>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer" 
-                    checked={settings.voiceMode}
-                    onChange={(e) => handleChange('voiceMode', e.target.checked)}
-                  />
-                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none dark:bg-zinc-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                </label>
-              </div>
-              <p className="text-xs text-zinc-500">Enable or disable the real-time voice assistant.</p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300">Language (Dil)</span>
-                <select 
-                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={settings.language}
-                  onChange={(e) => handleChange('language', e.target.value)}
-                >
-                  <option value="tr">Türkçe 🇹🇷</option>
-                  <option value="en">English 🇺🇸</option>
-                </select>
-              </div>
-              <p className="text-xs text-zinc-500">Select the primary language for Ultron's interface and agents.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Intelligence Section */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-zinc-400 font-bold text-xs uppercase tracking-widest px-2">
-            <Cpu className="w-4 h-4" />
-            Intelligence
-          </div>
-          <div className="space-y-4">
-            <div className="p-6 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h4 className="font-semibold text-zinc-900 dark:text-white">Active LLM Model</h4>
-                  <p className="text-sm text-zinc-500">Select the primary brain for Ultron.</p>
-                </div>
-                <select 
-                  className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
-                  value={settings.model}
-                  onChange={(e) => handleChange('model', e.target.value)}
-                >
-                  <option value="brain">Ultron Brain (Local 14B) ✨</option>
-                  <option value="qwen2.5-coder:14b">Qwen 2.5 Coder 14B (Fast)</option>
-                  <option value="qwen3-coder:30b">Qwen 3 Coder 30B (Genius)</option>
-                  <option value="qwen2.5:32b">Qwen 2.5 32B (Balanced)</option>
-                  <option value="qwen2.5:72b">Qwen 2.5 72B (Powerful)</option>
-                  <option value="gemini-2.0-flash">Gemini 2.0 Flash (Remote)</option>
-                  <option value="gpt-4o">GPT-4o (Premium)</option>
-                </select>
-              </div>
-
-              <div className="h-px bg-zinc-100 dark:bg-zinc-800 my-4" />
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-zinc-900 dark:text-white">Eternal Evolution</h4>
-                  <p className="text-sm text-zinc-500">Allow Ultron to autonomously improve its own code.</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer" 
-                    checked={settings.autonomousEvolution}
-                    onChange={(e) => handleChange('autonomousEvolution', e.target.checked)}
-                  />
-                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none dark:bg-zinc-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                </label>
-              </div>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Search className="w-5 h-5 text-indigo-500" />
-                  <h4 className="font-semibold text-zinc-900 dark:text-white">Research Depth</h4>
-                </div>
-                <span className="text-sm font-bold text-indigo-500 px-3 py-1 bg-indigo-500/10 rounded-lg">{settings.searchDepth} Levels</span>
-              </div>
-              <input 
-                type="range" 
-                min="1" 
-                max="5" 
-                step="1"
-                className="w-full h-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                value={settings.searchDepth}
-                onChange={(e) => handleChange('searchDepth', parseInt(e.target.value))}
-              />
-              <div className="flex justify-between text-[10px] font-bold text-zinc-500 mt-2 uppercase tracking-tighter">
-                <span>Fast Surface</span>
-                <span>Deep Dive Analysis</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Danger Zone */}
-        <section className="pt-6 border-t border-zinc-200 dark:border-zinc-800">
-          <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/20 flex items-center justify-between">
-            <div>
-              <h4 className="font-semibold text-red-600 dark:text-red-400">Factory Reset</h4>
-              <p className="text-xs text-zinc-500">Clear all memory, profiles and conversation history.</p>
-            </div>
-            <button 
-              onClick={() => confirm('Are you sure you want to reset EVERYTHING?') && alert('Resetting...')}
-              className="px-4 py-2 bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white rounded-xl text-xs font-bold transition-all border border-red-600/20"
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar Tabs */}
+        <div style={{
+          width: '200px',
+          borderRight: '1px solid var(--bd)',
+          padding: '20px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          background: 'rgba(0,0,0,0.2)',
+          overflowY: 'auto'
+        }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '12px 16px',
+                borderRadius: '12px',
+                border: 'none',
+                background: activeTab === tab.id ? 'rgba(124,111,247,0.1)' : 'transparent',
+                color: activeTab === tab.id ? 'var(--acc)' : 'var(--t3)',
+                fontFamily: 'var(--font)',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                transition: 'all 0.2s'
+              }}
             >
-              Reset System
+              <span style={{ fontSize: '18px' }}>{tab.icon}</span> {tab.label}
             </button>
-          </div>
-        </section>
+          ))}
+        </div>
+
+        {/* Content Area */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '30px' }}>
+          {activeTab === 'general' && (
+            <div style={{ maxWidth: '600px' }}>
+              <h3 style={{ marginBottom: '20px', color: 'var(--t1)' }}>Genel Tercihler</h3>
+              <SettingsRow icon="🌙" title="Karanlık Tema" sub="Karanlık modu zorla" right={<Toggle on={settings.darkMode} onToggle={() => toggle('darkMode')} />} />
+              <SettingsRow icon="🇹🇷" title="Türkçe Dil Desteği" sub="Arayüz dilini ayarla" right={<Toggle on={settings.language === 'tr'} onToggle={() => {}} />} />
+              <SettingsRow icon="💬" title="Streaming Modu" sub="Tokenleri canlı akışla al" right={<Toggle on={settings.streamingEnabled} onToggle={() => toggle('streamingEnabled')} />} />
+              <SettingsRow icon="🌐" title="Ngrok Uzaktan Erişim" sub="Mobil bağlantı için" right={<Toggle on={settings.ngrokEnabled} onToggle={() => toggle('ngrokEnabled')} />} />
+            </div>
+          )}
+
+          {activeTab === 'providers' && (
+            <div>
+              <h3 style={{ marginBottom: '20px', color: 'var(--t1)' }}>Zeka Sağlayıcıları (Providers)</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                {loading ? <div style={{ color: 'var(--t3)' }}>Bağlantılar taranıyor...</div> : 
+                  providers.map(p => (
+                    <div key={p.name} style={{ background: 'var(--bg2)', padding: '16px', borderRadius: '16px', border: '1px solid var(--bd)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: 600 }}>{p.name.toUpperCase()}</span>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.available ? 'var(--ac2)' : '#ff6464' }} />
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--t3)' }}>Model: {p.model}</div>
+                      <div style={{ fontSize: '12px', color: p.available ? 'var(--ac2)' : '#ff6464', marginTop: '4px' }}>
+                        {p.available ? `${p.latencyMs}ms Gecikme` : p.error || 'Bağlantı yok'}
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'agents' && (
+            <div>
+              <h3 style={{ marginBottom: '20px', color: 'var(--t1)' }}>Aktif Ajanlar</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+                {[
+                  { n: 'Brain', i: '🧠', s: 'Genesis 14B' },
+                  { n: 'Coder', i: '⚡', s: 'SFT v3.0' },
+                  { n: 'Research', i: '🔍', s: 'Web Agent' },
+                  { n: 'System', i: '🖥', s: 'OS Operator' },
+                  { n: 'Creative', i: '🎨', s: 'SDXL/Flux' },
+                  { n: 'Memory', i: '💾', s: 'Long-term' }
+                ].map(a => (
+                  <div key={a.n} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg2)', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '24px' }}>{a.i}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 600 }}>{a.n}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--t3)' }}>{a.s}</div>
+                    </div>
+                    <Toggle on={true} onToggle={() => {}} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'training' && (
+            <div>
+              <h3 style={{ marginBottom: '20px', color: 'var(--t1)' }}>Neural Training Progress</h3>
+              <div style={{ background: 'linear-gradient(135deg, rgba(124,111,247,0.1), rgba(86,207,191,0.1))', padding: '24px', borderRadius: '24px', border: '1px solid var(--bd)' }}>
+                <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--acc)', marginBottom: '10px' }}>Ultron Genesis v3.0</div>
+                <div style={{ fontSize: '14px', color: 'var(--t2)', marginBottom: '20px' }}>52K Training Samples → Target: 1.3M High Quality Neural Tokens</div>
+                <div style={{ height: '8px', background: 'var(--bg3)', borderRadius: '4px', overflow: 'hidden' }}>
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: '42%' }}
+                    transition={{ duration: 2, ease: "easeOut" }}
+                    style={{ height: '100%', background: 'linear-gradient(90deg, var(--acc), var(--ac2))' }} 
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: 'var(--t3)' }}>
+                  <span>Progress: 42%</span>
+                  <span>Estimated Time: 12h 45m</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    </motion.div>
+  )
 }
+
+const SettingsRow = ({ icon, title, sub, right }: { icon: string; title: string; sub: string; right: React.ReactNode }) => (
+  <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid var(--bd)', gap: '15px' }}>
+    <span style={{ fontSize: '20px', width: '30px' }}>{icon}</span>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)' }}>{title}</div>
+      <div style={{ fontSize: '12px', color: 'var(--t3)' }}>{sub}</div>
+    </div>
+    {right}
+  </div>
+)
+
+const Toggle = ({ on, onToggle }: { on: boolean; onToggle: () => void }) => (
+  <div onClick={onToggle} style={{
+    width: '44px', height: '24px', borderRadius: '12px', cursor: 'pointer',
+    background: on ? 'var(--acc)' : 'var(--bg4)',
+    display: 'flex', alignItems: 'center', padding: '2px',
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: on ? '0 0 15px rgba(124,111,247,0.4)' : 'none'
+  }}>
+    <div style={{
+      width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+      transform: on ? 'translateX(20px)' : 'translateX(0)',
+      transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+    }} />
+  </div>
+)

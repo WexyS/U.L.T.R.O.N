@@ -4,6 +4,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useIsMobile } from './hooks/useIsMobile'
+import { MobileDrawer } from './components/MobileDrawer'
+import { SettingsPanel } from './components/SettingsPanel'
 
 // ── TYPES ──────────────────────────────────────────────────
 interface Message {
@@ -566,8 +569,15 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const isMobile = useIsMobile()
   const msgsEndRef = useRef<HTMLDivElement>(null)
-  const { send: wsSend, connected } = useWebSocket('ws://localhost:8000/ws/chat')
+  const { send: wsSend, connected } = useWebSocket(
+    window.location.hostname === 'localhost' 
+      ? 'ws://localhost:8000/ws/chat' 
+      : `wss://${window.location.hostname}/ws/chat`
+  )
 
   const agents: Agent[] = [
     { name: 'WebSearch', status: 'ready' },
@@ -630,13 +640,40 @@ export default function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg0)', overflow: 'hidden' }}>
-      <Sidebar
-        conversations={conversations}
-        activeId={activeId}
-        onSelect={(id) => { setActiveId(id); setShowWelcome(false) }}
-        onNew={handleNewChat}
-      />
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg0)', overflow: 'hidden', position: 'relative' }}>
+      {!isMobile && (
+        <Sidebar
+          conversations={conversations}
+          activeId={activeId}
+          onSelect={(id) => { setActiveId(id); setShowWelcome(false) }}
+          onNew={handleNewChat}
+        />
+      )}
+
+      {isMobile && (
+        <MobileDrawer 
+          open={drawerOpen} 
+          onClose={() => setDrawerOpen(false)} 
+          onSettingsClick={() => setShowSettings(true)}
+        >
+           <div style={{ padding: '0 4px' }}>
+             <button onClick={handleNewChat} style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                padding: '14px', borderRadius: '14px', border: '1px solid var(--bd2)',
+                background: 'rgba(124,111,247,0.1)', color: 'var(--acc)', fontSize: '15px', fontWeight: 600,
+                marginBottom: '20px'
+             }}>＋ Yeni Konuşma</button>
+             {conversations.map(c => (
+                <div key={c.id} onClick={() => { setActiveId(c.id); setDrawerOpen(false); }} style={{
+                  padding: '12px', borderRadius: '10px', marginBottom: '4px',
+                  background: activeId === c.id ? 'var(--bg3)' : 'transparent',
+                  color: activeId === c.id ? 'var(--t1)' : 'var(--t3)',
+                  fontSize: '14px'
+                }}>• {c.title}</div>
+             ))}
+           </div>
+        </MobileDrawer>
+      )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Topbar */}
@@ -646,15 +683,26 @@ export default function App() {
           background: 'rgba(13,13,16,0.9)', backdropFilter: 'blur(10px)', flexShrink: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isMobile && (
+              <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--t1)', fontSize: '20px', padding: '0 8px 0 0' }}>☰</button>
+            )}
             <span style={{ fontSize: 14, fontWeight: 500 }}>
               {showWelcome ? 'ULTRON AGI' : conversations.find(c => c.id === activeId)?.title || 'Yeni Konuşma'}
             </span>
             <span style={{ padding: '3px 8px', background: 'var(--bg3)', border: '1px solid var(--bd)', borderRadius: 5, fontSize: 11, color: 'var(--t2)' }}>
-              {connected ? '● Online' : '○ Offline'} • ultron-v1
+              {connected ? '● Online' : '○ Offline'}
             </span>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {agents.map(a => <AgentChip key={a.name} {...a} />)}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {!isMobile && agents.map(a => <AgentChip key={a.name} {...a} />)}
+            <button 
+              onClick={() => setShowSettings(true)}
+              style={{
+                width: 32, height: 32, borderRadius: 8, background: 'var(--bg3)',
+                border: '1px solid var(--bd)', color: 'var(--t2)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16
+              }}
+            >⚙</button>
           </div>
         </div>
 
@@ -689,6 +737,12 @@ export default function App() {
 
         <ChatInput onSend={handleSend} disabled={isTyping} />
       </div>
+
+      <AnimatePresence>
+        {showSettings && (
+          <SettingsPanel onClose={() => setShowSettings(false)} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -56,8 +56,8 @@ if errorlevel 1 (
 )
 
 :: [2/4] Backend
-echo [+] Backend (8000) baslatiliyor...
-start "Ultron Backend" /D "%~dp0." cmd /k "%PYTHON_EXE%" -m uvicorn ultron.api.main:app --host 127.0.0.1 --port 8000
+echo [+] Backend (8000) baslatiliyor... [GLOBAL ACCESSIBLE: 0.0.0.0]
+start "Ultron Backend" /D "%~dp0." cmd /k "%PYTHON_EXE%" -m uvicorn ultron.api.main:app --host 0.0.0.0 --port 8000
 
 :: Record Backend PID
 timeout /t 2 >nul
@@ -92,8 +92,8 @@ if not exist "node_modules\" (
     call npm install
 )
 
-echo [+] Arayuz baslatiliyor...
-start "Ultron Frontend" cmd /c "npm run dev"
+echo [+] Arayuz baslatiliyor... [GLOBAL ACCESSIBLE: 0.0.0.0]
+start "Ultron Frontend" cmd /c "npm run dev -- --host 0.0.0.0"
 
 :: Record Frontend PID
 for /f "tokens=2" %%i in ('tasklist /fi "windowtitle eq Ultron Frontend" /fo csv /nh') do (
@@ -111,6 +111,23 @@ if errorlevel 1 (
 )
 
 echo [OK] Frontend hazir.
+
+:: [5/4] Ngrok Integration (Optional)
+where ngrok >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [+] Ngrok bulundu, tünel aciliyor...
+    :: Check if tunnel already running
+    tasklist /fi "windowtitle eq Ultron Ngrok" /fo csv /nh | findstr /i "ngrok" >nul
+    if errorlevel 1 (
+        start "Ultron Ngrok" /min cmd /k "ngrok http 5173"
+        timeout /t 3 >nul
+        echo [+] Ngrok URL .env dosyasina isleniyor...
+        powershell -Command "try { $r=(Invoke-WebRequest 'http://localhost:4040/api/tunnels' -UseBasicParsing).Content | ConvertFrom-Json; $url=$r.tunnels[0].public_url; if($url) { (Get-Content ../.env) -replace '^NGROK_URL=.*','NGROK_URL='+$url | Set-Content ../.env; echo \"[NGROK] $url\"; } } catch { echo \"[NGROK] Tünel bilgisi henüz hazir degil.\" }"
+    )
+) else (
+    echo [i] Ngrok bulunmadi. Uzaktan erisim icin: https://ngrok.com
+)
+
 echo [+] Ultron Arayuzu aciliyor... (Lutfen 5 saniye bekleyin)
 timeout /t 5 >nul
 start http://localhost:5173

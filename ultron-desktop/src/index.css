@@ -66,3 +66,26 @@ body { font-family: var(--font); background: var(--bg0); color: var(--t1); }
 button {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
+
+/* ── MOBİL RESPONSIVE ── */
+@media (max-width: 768px) {
+  .sidebar { display: none !important; }
+  .main { width: 100% !important; }
+  .topbar { padding: 8px 12px !important; }
+  .bubble { max-width: calc(100vw - 80px) !important; }
+  .input-area { padding: 8px 10px 12px !important; }
+  .agent-chips { display: none !important; }
+  .react-steps { gap: 4px !important; }
+  .step { font-size: 9px !important; padding: 2px 6px !important; }
+  textarea { font-size: 16px !important; } /* iOS zoom önlemi */
+  .input-area { padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important; }
+}
+
+@media (max-width: 480px) {
+  .code-block { font-size: 11px !important; }
+  .bubble { font-size: 13.5px !important; }
+}
+
+/* PWA touch iyileştirmeleri */
+* { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button, .clickable { min-height: 44px; min-width: 44px; }

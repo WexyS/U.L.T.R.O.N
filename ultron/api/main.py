@@ -167,13 +167,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Ultron v2.0 API", version="2.1.0", lifespan=lifespan)
 
 # ── Security: CORS — scoped origins, not "*" ──────────────────────────
-ALLOWED_ORIGINS = os.getenv(
+allowed_origins = os.getenv(
     "ULTRON_ALLOWED_ORIGINS",
-    "http://localhost:5173,http://localhost:5174,https://localhost:5173,https://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174,https://127.0.0.1:5173,https://127.0.0.1:5174"
+    "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174"
 ).split(",")
+
+# Add Ngrok URL if present
+ngrok_url = os.getenv("NGROK_URL", "").strip()
+if ngrok_url:
+    if ngrok_url.endswith("/"):
+        ngrok_url = ngrok_url[:-1]
+    allowed_origins.append(ngrok_url)
+    allowed_origins.append(ngrok_url.replace("https://", "http://"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
