@@ -37,6 +37,14 @@ class SecurityManager:
         except Exception:
             return False
 
+    def get_stats(self) -> dict:
+        """Return security manager statistics for the status dashboard."""
+        return {
+            "allowed_roots": self.allowed_roots,
+            "audit_dir": self.audit_dir,
+            "status": "active",
+        }
+
 class SSRFGuard:
     """Prevents Server-Side Request Forgery by validating target URLs and IPs."""
 

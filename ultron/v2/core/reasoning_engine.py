@@ -109,3 +109,10 @@ Cevap: {answer}
         # Remove thinking block from final answer
         answer = re.sub(r"<thinking>[\s\S]*?</thinking>", "", content).strip()
         return thinking, answer
+
+    def get_stats(self) -> dict:
+        """Return reasoning engine statistics for the status dashboard."""
+        return {
+            "engine": "CoT-ReasoningEngine",
+            "status": "active",
+        }

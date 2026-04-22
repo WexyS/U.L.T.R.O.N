@@ -206,13 +206,13 @@ async def verify_api_key(request: Request):
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-def _log_request_middleware(request: Request, call_next):
+async def _log_request_middleware(request: Request, call_next):
     """Middleware for structured request logging."""
     start = time.time()
     request_id = getattr(request.state, "request_id", "unknown")
     response = None
     try:
-        response = call_next(request)
+        response = await call_next(request)
     finally:
         duration_ms = (time.time() - start) * 1000
         if _use_structlog:

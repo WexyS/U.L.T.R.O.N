@@ -7,6 +7,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useIsMobile } from './hooks/useIsMobile'
 import { MobileDrawer } from './components/MobileDrawer'
 import { SettingsPanel } from './components/SettingsPanel'
+import { API_URL, WS_URL } from './config'
 
 // ── TYPES ──────────────────────────────────────────────────
 interface Message {
@@ -230,9 +231,10 @@ const MessageBubble = ({ msg }: { msg: Message }) => {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
-              code({ node, inline, className, children, ...props }) {
+              code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '')
-                return !inline && match ? (
+                const isInline = !match && !String(children).includes('\n')
+                return !isInline && match ? (
                   <CodeBlock language={match[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>
                 ) : (
                   <code style={{
@@ -573,11 +575,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const isMobile = useIsMobile()
   const msgsEndRef = useRef<HTMLDivElement>(null)
-  const { send: wsSend, connected } = useWebSocket(
-    window.location.hostname === 'localhost' 
-      ? 'ws://localhost:8000/ws/chat' 
-      : `wss://${window.location.hostname}/ws/chat`
-  )
+  const { send: wsSend, connected } = useWebSocket(WS_URL)
 
   const agents: Agent[] = [
     { name: 'WebSearch', status: 'ready' },

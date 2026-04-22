@@ -1,6 +1,8 @@
 """Tests for User Profile and Emotional Intelligence (EQ) features."""
 import pytest
 import asyncio
+import torch
+import torch.nn as nn
 from ultron.v2.memory.user_profile_manager import UserProfileManager
 from ultron.v2.core.react_orchestrator import ReActOrchestrator
 

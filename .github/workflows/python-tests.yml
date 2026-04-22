@@ -10,12 +10,12 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.11'
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install torch>=2.4.0 --extra-index-url https://download.pytorch.org/whl/cpu
+        pip install "torch>=2.4.0" "torchaudio>=2.4.0" "torchvision>=0.19.0" --extra-index-url https://download.pytorch.org/whl/cpu
         pip install -e ".[dev]"
     - name: Run tests
       run: |
-        python -m pytest tests/v2/
+        python -m pytest -v tests/v2/

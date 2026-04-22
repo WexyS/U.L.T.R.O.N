@@ -60,3 +60,10 @@ class ReasoningEngine:
         )
         resp = await self.llm.chat([{"role": "user", "content": prompt}])
         return resp.content
+
+    def get_stats(self) -> dict:
+        """Return reasoning engine statistics for the status dashboard."""
+        return {
+            "engine": "CoT-ReasoningEngine",
+            "status": "active",
+        }
