@@ -1,171 +1,68 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Light Theme - Claude Aesthetic */
-  --color-bg: 255 255 255;
-  --color-bg-secondary: 248 248 248;
-  --color-bg-tertiary: 240 240 240;
-  --color-panel: 255 255 255;
-  --color-card: 255 255 255;
-  --color-border: 230 230 230;
-  --color-border-light: 240 240 240;
-  --color-text: 20 20 20;
-  --color-text-secondary: 80 80 80;
-  --color-text-tertiary: 120 120 120;
-  --color-text-muted: 160 160 160;
-  --color-accent: 139 92 246; /* Purple 500 */
-  --color-accent-hover: 124 58 237; /* Purple 600 */
-  --color-success: 34 197 94;
-  --color-warning: 245 158 11;
-  --color-danger: 239 68 68;
-  
-  --glass-bg: 255 255 255 / 0.8;
-  --glass-border: 230 230 230 / 0.5;
-  --app-font-size: 16px;
+  --bg0: #0d0d10;
+  --bg1: #111115;
+  --bg2: #18181f;
+  --bg3: #1e1e27;
+  --bg4: #24242f;
+  --acc: #7c6ff7;
+  --acc2: #56cfbf;
+  --acc3: #e879a0;
+  --t1: #f0f0f8;
+  --t2: #a0a0c0;
+  --t3: #60607a;
+  --t4: #35354a;
+  --bd: rgba(255,255,255,0.06);
+  --bd2: rgba(124,111,247,0.3);
+  --r: 10px;
+  --r2: 14px;
+  --font: 'Inter', -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-.font-size-sm { --app-font-size: 13px; }
-.font-size-md { --app-font-size: 15px; }
-.font-size-lg { --app-font-size: 17px; }
-.font-size-xl { --app-font-size: 20px; }
+html, body, #root { height: 100%; overflow: hidden; }
+body { font-family: var(--font); background: var(--bg0); color: var(--t1); }
 
-.dark {
-  /* Dark Theme - Claude Aesthetic */
-  --color-bg: 18 18 18;
-  --color-bg-secondary: 28 28 28;
-  --color-bg-tertiary: 35 35 35;
-  --color-panel: 24 24 24;
-  --color-card: 32 32 32;
-  --color-border: 45 45 45;
-  --color-border-light: 40 40 40;
-  --color-text: 240 240 240;
-  --color-text-secondary: 170 170 170;
-  --color-text-tertiary: 140 140 140;
-  --color-text-muted: 100 100 100;
-  --color-accent: 139 92 246; /* Purple 500 */
-  --color-accent-hover: 167 139 250; /* Purple 400 */
-  --color-success: 34 197 94;
-  --color-warning: 245 158 11;
-  --color-danger: 239 68 68;
-  
-  --glass-bg: 24 24 24 / 0.9;
-  --glass-border: 45 45 45 / 0.5;
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--t4); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 4px var(--acc2); }
+  50%       { box-shadow: 0 0 14px var(--acc2); }
+}
+@keyframes chipPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50%       { opacity: 1;   transform: scale(1); }
+}
+@keyframes typBounce {
+  0%, 80%, 100% { transform: scale(0.5); opacity: 0.3; }
+  40%            { transform: scale(1.1); opacity: 1; }
 }
 
-@layer base {
-  html {
-    font-size: var(--app-font-size);
-  }
-  html, body {
-    @apply h-full m-0 p-0 overflow-hidden font-sans;
-    background-color: rgb(var(--color-bg));
-    color: rgb(var(--color-text));
-  }
-
-  /* Let components keep their own border-radius */
-  * {
-    @apply border-[var(--color-border)];
-  }
+/* Antigravity Polish: Glassmorphism & Smooth Transitions */
+.glass {
+  background: rgba(24, 24, 31, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
 }
 
-@layer components {
-  .glass-panel {
-    @apply backdrop-blur-xl bg-[var(--glass-bg)] border border-[var(--glass-border)];
-  }
-
-  .glass-card {
-    @apply backdrop-blur-md bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 shadow-lg rounded-[2rem] transition-all duration-300;
-  }
-
-  .btn-premium {
-    @apply px-4 py-2 rounded-2xl font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
-    background-color: rgb(var(--color-accent));
-    color: white;
-  }
-
-  .btn-premium:hover:not(:disabled) {
-    background-color: rgb(var(--color-accent-hover));
-    @apply shadow-lg shadow-purple-500/20;
-  }
-
-  .scrollbar-premium {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(var(--color-border)) transparent;
-  }
-
-  .scrollbar-premium::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .scrollbar-premium::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-premium::-webkit-scrollbar-thumb {
-    background: rgb(var(--color-border));
-    border-radius: 10px;
-  }
-
-  /* Chat Bubble Styles - Claude Aesthetic */
-  .message-bubble-assistant {
-    @apply px-0 py-2 text-zinc-800 dark:text-zinc-200;
-  }
-
-  .message-bubble-user {
-    @apply px-6 py-4 rounded-[2rem] bg-zinc-100 dark:bg-zinc-800/80 text-zinc-900 dark:text-zinc-100 max-w-fit shadow-sm;
-  }
-
-  .chat-prose {
-    @apply prose max-w-none;
-    font-size: var(--app-font-size);
-    line-height: 1.7;
-  }
-
-  .dark .chat-prose {
-    @apply prose-invert;
-  }
-
-  .prose {
-    @apply max-w-none;
-    font-size: inherit;
-    --tw-prose-body: rgb(var(--color-text));
-    --tw-prose-headings: rgb(var(--color-text));
-    --tw-prose-links: rgb(var(--color-accent));
-    --tw-prose-bold: rgb(var(--color-text));
-    --tw-prose-counters: rgb(var(--color-text-secondary));
-    --tw-prose-bullets: rgb(var(--color-text-tertiary));
-    --tw-prose-hr: rgb(var(--color-border));
-    --tw-prose-quotes: rgb(var(--color-text-secondary));
-    --tw-prose-quote-borders: rgb(var(--color-accent));
-    --tw-prose-captions: rgb(var(--color-text-muted));
-    --tw-prose-code: rgb(var(--color-text));
-    --tw-prose-pre-code: rgb(var(--color-text));
-    --tw-prose-pre-bg: rgb(var(--color-bg-secondary));
-    --tw-prose-th-borders: rgb(var(--color-border));
-    --tw-prose-td-borders: rgb(var(--color-border-light));
-  }
+.glow-acc {
+  box-shadow: 0 0 20px rgba(124, 111, 247, 0.15);
 }
 
-/* Animations */
-@keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(0px); }
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-/* Fix for background when theme is missing */
-html {
-  background-color: #121212;
-}
-
-html.light {
-  background-color: #ffffff;
+button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }

@@ -20,11 +20,28 @@ logger = logging.getLogger("ultron.core.evolution")
 class EternalEvolutionEngine:
     """The 'Brain' behind Ultron's autonomous growth."""
 
-    def __init__(self, sleep_interval_minutes: int = 60):
+    def __init__(self, orchestrator=None, sleep_interval_minutes: int = 60):
+        self.orchestrator = orchestrator
         self.sleep_interval_minutes = sleep_interval_minutes
         self._running = False
         self.enabled = os.getenv("ULTRON_EVOLUTION_ENABLED", "0") in ("1", "true")
+        self.allow_git = os.getenv("ULTRON_EVOLUTION_ALLOW_GIT", "0") in ("1", "true")
         self.work_dir = os.getcwd()
+
+    async def _run_git(self, args: List[str]):
+        """Helper to run git commands."""
+        if not self.allow_git:
+            return
+        cmd = ["git"] + args
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.warning(f"Git command failed: {' '.join(cmd)} | Error: {stderr.decode()}")
+        except Exception as e:
+            logger.error(f"Git error: {e}")
 
     async def start_loop(self):
         """Starts the autonomous evolution loop."""
@@ -56,22 +73,28 @@ class EternalEvolutionEngine:
 
         brainstorm_task = AgentTask(task_type="brainstorm", input_data="system_evolution")
         ideas = await curiosity.execute(brainstorm_task)
-        if not ideas.success:
+        if not (ideas.success and ideas.output):
             return
 
         idea = ideas.output
-        logger.info(f"Evolution Idea: {idea.get('topic')}")
+        topic = idea.get('topic', 'feature_enhancement')
+        branch_name = f"evolution/{topic.lower().replace(' ', '_')[:20]}_{int(datetime.now().timestamp())}"
+        
+        # 2. Safety: Create a new Git branch
+        if self.allow_git:
+            await self._run_git(["checkout", "-b", branch_name])
+            logger.info(f"Created evolution branch: {branch_name}")
 
-        # 2. Architect Review
+        # 3. Architect Review
         architect = registry.get_agent("Architect")
-        arch_task = AgentTask(task_type="design", input_data=idea.get('topic'), context=idea)
+        arch_task = AgentTask(task_type="design", input_data=topic, context=idea)
         design = await architect.execute(arch_task)
         if not design.success:
+            if self.allow_git: await self._run_git(["checkout", "main"])
             return
 
-        # 3. Implementation (Self-Improvement / Code Generation)
-        # For v3.0, we use the ReActOrchestrator to handle the implementation
-        orchestrator = registry.get_agent("ReActOrchestrator")
+        # 4. Implementation (ReAct Orchestrator)
+        orchestrator = self.orchestrator or registry.get_agent("ReActOrchestrator")
         impl_task = AgentTask(
             task_type="implement_feature",
             input_data=f"Implement the following feature based on this design: {design.output}",
@@ -81,11 +104,31 @@ class EternalEvolutionEngine:
         result = await orchestrator.execute(impl_task)
         
         if result.success:
-            logger.info(f"Evolution Success: {idea.get('topic')} implemented.")
-            event_bus.publish("evolution_success", {"topic": idea.get('topic'), "result": result.output})
+            # 5. Automated Testing
+            test_proc = await asyncio.create_subprocess_exec(
+                "python", "-m", "pytest", "tests/",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            _, _ = await test_proc.communicate()
+            
+            if test_proc.returncode == 0:
+                logger.info(f"Evolution Success: {topic} implemented and tested.")
+                if self.allow_git:
+                    await self._run_git(["add", "."])
+                    await self._run_git(["commit", "-m", f"feat(evolution): {topic}"])
+                event_bus.publish("evolution_success", {"topic": topic, "branch": branch_name})
+            else:
+                logger.warning(f"Evolution Failed Tests: {topic}. Rolling back.")
+                if self.allow_git:
+                    await self._run_git(["checkout", "."])
+                    await self._run_git(["checkout", "main"])
+                event_bus.publish("evolution_failure", {"topic": topic, "error": "Tests failed after implementation."})
         else:
-            logger.warning(f"Evolution Failed: {result.error}")
-            event_bus.publish("evolution_failure", {"topic": idea.get('topic'), "error": result.error})
+            logger.warning(f"Evolution Implementation Failed: {result.error}")
+            if self.allow_git:
+                await self._run_git(["checkout", "."])
+                await self._run_git(["checkout", "main"])
+            event_bus.publish("evolution_failure", {"topic": topic, "error": result.error})
 
     def stop(self):
         self._running = False

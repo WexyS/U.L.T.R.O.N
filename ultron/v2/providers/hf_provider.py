@@ -15,9 +15,14 @@ from ultron.v2.providers.base import (
 
 class HFProvider(BaseProvider):
     def __init__(self):
+        api_key = (
+            os.getenv("HF_API_KEY") or 
+            os.getenv("HF_TOKEN") or 
+            os.getenv("HUGGING_FACE_HUB_TOKEN")
+        )
         config = ProviderConfig(
             name="hf",
-            api_key=os.getenv("HF_API_KEY"),
+            api_key=api_key,
             base_url="https://api-inference.huggingface.co/models",
             default_model=os.getenv("HF_DEFAULT_MODEL", "mistralai/Mistral-7B-Instruct-v0.3"),
             timeout=90,

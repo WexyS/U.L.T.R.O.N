@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import aiosqlite
+from ultron.v2.memory.base_db import get_db
 
 logger = logging.getLogger("ultron.core.ai_bridge")
 
@@ -27,9 +28,7 @@ class AIBridge:
 
     async def initialize(self):
         """Initialize the database schema with performance PRAGMAs."""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA synchronous=NORMAL")
+        async with get_db(self.db_path) as db:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS bridge_queue (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +51,7 @@ class AIBridge:
         if not external_id:
             external_id = f"REQ-{int(time.time())}-{sender[:3]}"
 
-        async with aiosqlite.connect(self.db_path) as db:
+        async with get_db(self.db_path) as db:
             try:
                 cursor = await db.execute(
                     "INSERT INTO bridge_queue (external_id, sender, subject, content, metadata) VALUES (?, ?, ?, ?, ?)",
@@ -67,7 +66,7 @@ class AIBridge:
 
     async def get_pending_requests(self) -> List[Dict[str, Any]]:
         """Retrieve all pending requests."""
-        async with aiosqlite.connect(self.db_path) as db:
+        async with get_db(self.db_path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM bridge_queue WHERE status = 'pending' ORDER BY created_at ASC") as cursor:
                 rows = await cursor.fetchall()
@@ -75,7 +74,7 @@ class AIBridge:
 
     async def update_status(self, request_id: int, status: str, response: Optional[str] = None):
         """Update the status of a request."""
-        async with aiosqlite.connect(self.db_path) as db:
+        async with get_db(self.db_path) as db:
             now = datetime.now().isoformat()
             await db.execute(
                 "UPDATE bridge_queue SET status = ?, response = ?, processed_at = ? WHERE id = ?",

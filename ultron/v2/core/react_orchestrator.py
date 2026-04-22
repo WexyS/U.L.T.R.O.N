@@ -13,6 +13,9 @@ from ultron.v2.core.agent_registry import registry
 from ultron.v2.core.event_bus import event_bus
 from ultron.v2.core.llm_router import router
 from ultron.v2.memory.user_profile_manager import manager as user_profile
+from ultron.v2.core.personality import personality_engine
+from ultron.v2.core.reasoning_engine import ReasoningEngine
+from ultron.v2.core.safety_filter import SafetyFilter
 
 logger = logging.getLogger("ultron.orchestrator")
 
@@ -43,6 +46,8 @@ class ReActOrchestrator(BaseAgent):
             skill_engine=skill_engine
         )
         self.chain = ReActChain()
+        self.reasoner = ReasoningEngine(router)
+        self.safety = SafetyFilter(router)
 
     async def execute(self, task: AgentTask) -> AgentResult:
         """Execute the high-level orchestration loop."""
@@ -138,28 +143,34 @@ class ReActOrchestrator(BaseAgent):
 
     async def _think(self, task: AgentTask) -> str:
         agents_info = "\n".join([f"- {a['name']}: {a['description']}" for a in registry.list_agents()])
-        prompt = [
-            {"role": "system", "content": (
-                "You are the ULTRON v3.0 AGI Brain. Analyze the user request and think step-by-step how to solve it.\n"
-                "You have access to the following specialized agents:\n"
-                f"{agents_info}\n\n"
-                "Think about which agents are needed and in what order."
-            )},
-            {"role": "user", "content": f"Task: {task.input_data}\nContext: {task.context}"}
-        ]
-        resp = await router.chat(prompt)
-        return resp.content
+        user_profile_data = task.context.get("user_profile", "")
+        
+        # 1. Personality Guided Prompt
+        context = f"AVAILABLE AGENTS:\n{agents_info}\n\nUSER PROFILE:\n{user_profile_data}"
+        
+        # 2. Advanced Reasoning (CoT)
+        reasoning = await self.reasoner.think_and_answer(task.input_data)
+        
+        # Emit thinking to frontend
+        if reasoning.thinking:
+            await self._emit_step(ReActStep("think", reasoning.thinking))
+            
+        return reasoning.answer
 
     async def _plan(self, task: AgentTask, thought: str) -> List[Dict[str, Any]]:
         agents_names = ", ".join([a['name'] for a in registry.list_agents()])
         prompt = [
             {"role": "system", "content": (
-                "Based on the thought process, create an execution plan as a JSON list of subtasks.\n"
-                f"Available Agents: [{agents_names}]\n\n"
-                "Each subtask MUST use one of the available agents.\n"
-                "Format: [{\"agent_name\": \"...\", \"description\": \"...\", \"input_data\": \"...\", \"parallel\": bool}]"
+                "Convert the thought process into a formal execution plan.\n"
+                "Rules:\n"
+                "- Return ONLY a JSON list of subtasks.\n"
+                "- Each subtask must map to an available agent.\n"
+                "- Use 'parallel': true if a task can run alongside others.\n"
+                "- Use 'input_data' to provide the EXACT prompt for the sub-agent.\n\n"
+                f"AVAILABLE AGENTS: [{agents_names}]\n\n"
+                "JSON Format: [{\"agent_name\": \"...\", \"description\": \"...\", \"input_data\": \"...\", \"parallel\": bool}]"
             )},
-            {"role": "user", "content": f"Thought: {thought}"}
+            {"role": "user", "content": f"Thought Process: {thought}"}
         ]
         resp = await router.chat(prompt)
         try:
@@ -233,9 +244,14 @@ class ReActOrchestrator(BaseAgent):
         lesson_context = task.context.get("lesson_context", "")
         
         system_prompt = (
-            "Reflect on the actions so far. Is the task complete? "
-            "If yes, include 'TASK_COMPLETE'. If not, explain missing steps.\n"
-            f"CONSIDER USER PROFILE: {user_profile}\n"
+            "Critically reflect on the orchestration progress.\n"
+            "Evaluate:\n"
+            "1. Did the agents actually solve the problem?\n"
+            "2. Is there any missing information or unresolved constraint?\n"
+            "3. Does the result align with the USER PROFILE?\n\n"
+            "If the task is fully complete, include 'TASK_COMPLETE'.\n"
+            "If NOT, describe EXACTLY what remains to be done.\n\n"
+            f"USER PROFILE: {user_profile}\n"
             f"RELEVANT LESSONS: {lesson_context}"
         )
         
@@ -261,25 +277,41 @@ class ReActOrchestrator(BaseAgent):
 
     async def _generate_final_response(self, task: AgentTask, steps: List[ReActStep]) -> str:
         history = "\n".join([f"{s.step_type.upper()}: {s.content}" for s in steps])
-        user_profile = task.context.get("user_profile", "")
         mood = task.context.get("current_mood", "CHILL")
         
-        system_prompt = (
-            "You are ULTRON, a sophisticated and loyal AGI assistant. "
-            "Provide the final response based on the orchestration process.\n"
-            f"ADAPT TO USER PROFILE: {user_profile}\n"
-            f"CURRENT USER MOOD: {mood}\n"
-            "If the user is STRESSED, be more concise and supportive. "
-            "If the user is EXCITED, share their enthusiasm. "
-            "If the user is ANGRY, be ultra-professional and solution-oriented."
+        # 1. Personality Engine
+        system_prompt = personality_engine.get_system_prompt(
+            user_name=task.context.get("user_name", "User"),
+            context=f"CURRENT USER MOOD: {mood}\nPROCESS HISTORY:\n{history}"
         )
         
-        prompt = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"User Request: {task.input_data}\nProcess History:\n{history}"}
-        ]
-        resp = await router.chat(prompt)
-        return resp.content
+        # 2. Advanced Generation with Self-Correction
+        reasoning = await self.reasoner.think_and_answer(
+            f"Generate final response for: {task.input_data}",
+            max_revisions=1 # Self-correction enabled for final response
+        )
+        
+        # 3. Personality Filter (Boilerplate removal)
+        final_answer = personality_engine.filter_response(reasoning.answer)
+        
+        # 4. Safety Check (Constitutional AI)
+        safe_answer = await self.safety.check_response(task.input_data, final_answer)
+        
+        # 5. POST-PROCESS: Learn from interaction
+        try:
+            async def llm_helper(prompt: str) -> str:
+                resp = await self.reasoner.router.chat([{"role": "user", "content": prompt}])
+                return resp.content
+
+            asyncio.create_task(user_profile.update_from_interaction(
+                task.input_data, 
+                safe_answer, 
+                llm_helper
+            ))
+        except Exception as e:
+            logger.warning(f"Failed to trigger user profile update: {e}")
+            
+        return safe_answer
 
     async def _emit_step(self, step: ReActStep):
         """Emit step to event bus for frontend visualization."""

@@ -44,34 +44,20 @@ except ImportError:
     logger = logging.getLogger("ultron.api")
     _use_structlog = False
 
+import uuid
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
-
-def _log_request_middleware(request: Request, call_next):
-    """Middleware for structured request logging."""
-    start = time.time()
-    response = None
-    try:
-        response = call_next(request)
-    finally:
-        duration_ms = (time.time() - start) * 1000
-        if _use_structlog:
-            logger.info(
-                "request_completed",
-                method=request.method,
-                path=request.url.path,
-                duration_ms=round(duration_ms, 2),
-                status_code=getattr(response, "status_code", None) if response else None,
-            )
-        else:
-            logger.info(
-                "%s %s — %dms — %s",
-                request.method,
-                request.url.path,
-                round(duration_ms, 2),
-                getattr(response, "status_code", None) if response else "?",
-            )
-    return response
 
 
 @asynccontextmanager
@@ -208,7 +194,38 @@ async def verify_api_key(request: Request):
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header")
 
 # ── Request logging middleware ────────────────────────────────────────
-from starlette.middleware.base import BaseHTTPMiddleware
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+def _log_request_middleware(request: Request, call_next):
+    """Middleware for structured request logging."""
+    start = time.time()
+    request_id = getattr(request.state, "request_id", "unknown")
+    response = None
+    try:
+        response = call_next(request)
+    finally:
+        duration_ms = (time.time() - start) * 1000
+        if _use_structlog:
+            logger.info(
+                "request_completed",
+                method=request.method,
+                path=request.url.path,
+                request_id=request_id,
+                duration_ms=round(duration_ms, 2),
+                status_code=getattr(response, "status_code", None) if response else None,
+            )
+        else:
+            logger.info(
+                "[%s] %s %s — %dms — %s",
+                request_id,
+                request.method,
+                request.url.path,
+                round(duration_ms, 2),
+                getattr(response, "status_code", None) if response else "?",
+            )
+    return response
+
 app.add_middleware(BaseHTTPMiddleware, dispatch=_log_request_middleware)
 
 from ultron.api.routes.chat import router as chat_router
@@ -284,14 +301,33 @@ async def root():
 @app.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request):
-    """Health check endpoint for startup scripts and load balancers."""
+    """Health check endpoint with sub-system details."""
     uptime = time.time() - START_TIME
+    
+    # Sub-system checks
+    checks = {
+        "api": "ok",
+        "orchestrator": "ok" if _orchestrator else "initializing",
+    }
+    
+    # Check Providers
+    try:
+        from ultron.v2.providers.router import ProviderRouter
+        router = ProviderRouter()
+        status = await router.provider_status()
+        checks["providers_healthy"] = sum(1 for p in status.values() if p["available"])
+    except:
+        checks["providers"] = "error"
+
+    all_ok = all(v != "error" and v != "degraded" for v in checks.values())
+    
     return JSONResponse(
-        status_code=200,
+        status_code=200 if all_ok else 503,
         content={
-            "status": "ok" if _orchestrator else "degraded",
+            "status": "healthy" if all_ok else "degraded",
             "version": "2.1.0",
             "uptime_seconds": round(uptime, 1),
+            "checks": checks
         },
     )
 
@@ -536,8 +572,11 @@ async def openguider_chat(req: OpenGuiderRequest, request: Request):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ──────────────────────────────────────────────────────────────────────
-# TTS Endpoint — Text-to-Speech via edge-tts
+# TTS Endpoint — Text-to-Speech via edge-tts with Cache
 # ──────────────────────────────────────────────────────────────────────
+
+import hashlib
+_tts_cache = {}  # In-memory cache: hash(text+voice) -> audio_bytes
 
 @app.post("/api/v2/tts")
 @limiter.limit("60/minute")
@@ -546,6 +585,20 @@ async def text_to_speech(req: TTSRequest, request: Request):
     try:
         import httpx
         import io
+
+        # 0. Check Cache
+        voice = req.voice
+        if not voice:
+            voice = "tr-TR-AhmetNeural" if req.language == "tr" else "en-GB-RyanNeural"
+            
+        cache_key = hashlib.md5(f"{req.text}:{voice}".encode()).hexdigest()
+        if cache_key in _tts_cache:
+            if _use_structlog: logger.info("tts_cache_hit", text=req.text[:20])
+            return StreamingResponse(
+                io.BytesIO(_tts_cache[cache_key]),
+                media_type="audio/mpeg",
+                headers={"X-TTS-Cache": "HIT"}
+            )
 
         # 1. Try Local VoiceBox API
         try:
@@ -560,12 +613,14 @@ async def text_to_speech(req: TTSRequest, request: Request):
 
                 resp = await client.post("http://localhost:17493/generate", json=payload)
                 if resp.status_code == 200:
+                    _tts_cache[cache_key] = resp.content # Save to cache
                     return StreamingResponse(
                         io.BytesIO(resp.content),
                         media_type="audio/mpeg",
                         headers={
                             "Content-Disposition": 'inline; filename="tts.mp3"',
                             "X-TTS-Engine": "VoiceBox",
+                            "X-TTS-Cache": "MISS"
                         }
                     )
                 else:
@@ -581,30 +636,27 @@ async def text_to_speech(req: TTSRequest, request: Request):
 
         # 2. Fallback to EdgeTTS
         import edge_tts
-        # Auto-select voice based on language
-        voice = req.voice
-        if not voice:
-            if req.language == "tr":
-                voice = "tr-TR-AhmetNeural"
-            else:
-                voice = "en-GB-RyanNeural"
-
-        # Stream audio chunks directly
+        
+        # Stream and collect for caching
         communicate = edge_tts.Communicate(req.text, voice)
-
-        async def audio_stream():
-            """Async generator that yields audio chunks as they arrive."""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    yield chunk["data"]
+        audio_bytes = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_bytes += chunk["data"]
+        
+        # Save to cache (limit size to 100 entries)
+        if len(_tts_cache) > 100:
+            _tts_cache.pop(next(iter(_tts_cache)))
+        _tts_cache[cache_key] = audio_bytes
 
         return StreamingResponse(
-            audio_stream(),
+            io.BytesIO(audio_bytes),
             media_type="audio/mpeg",
             headers={
                 "Content-Disposition": 'inline; filename="tts.mp3"',
                 "X-Voice": voice,
-                "X-TTS-Engine": "EdgeTTS"
+                "X-TTS-Engine": "EdgeTTS",
+                "X-TTS-Cache": "MISS"
             }
         )
     except Exception as e:
@@ -612,6 +664,17 @@ async def text_to_speech(req: TTSRequest, request: Request):
 
 async def get_orchestrator():
     return _orchestrator
+
+@app.get("/api/v3/agents")
+async def get_all_agents():
+    """Returns status and metadata for all registered agents (v3.0 compatible)."""
+    from ultron.v2.core.agent_registry import registry
+    agents = []
+    for agent_info in registry.list_agents():
+        agent = registry.get_agent(agent_info["name"])
+        if agent:
+            agents.append(agent.get_status())
+    return agents
 
 if __name__ == "__main__":
     import uvicorn

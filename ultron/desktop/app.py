@@ -262,12 +262,25 @@ class UltronDesktop(QMainWindow):
                 audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
             
             self.reactor.set_state("processing")
-            self.log_message("> TRANSCRIBING AUDIO...")
+            self.log_message("> TRANSCRIBING AUDIO (LOCAL WHISPER)...")
             
-            # 2. STT
+            # 2. STT (Local Whisper)
             try:
-                lang_code = "tr-TR" if self.current_lang == "TR" else "en-US"
-                user_text = recognizer.recognize_google(audio, language=lang_code)
+                from ultron.skills.whisper_engine import whisper_engine
+                # Save audio to temp file for Whisper
+                with NamedTemporaryFile(delete=False, suffix=".wav") as f:
+                    f.write(audio.get_wav_data())
+                    temp_audio_path = f.name
+                
+                lang_code = "tr" if self.current_lang == "TR" else "en"
+                user_text = await whisper_engine.transcribe(temp_audio_path, language=lang_code)
+                
+                try: os.remove(temp_audio_path)
+                except: pass
+                
+                if not user_text:
+                    raise ValueError("No speech detected.")
+                    
                 self.log_message(f"> USER ({self.current_lang}): {user_text}")
             except Exception as e:
                 self.log_message(f"> STT ERROR: {e}")

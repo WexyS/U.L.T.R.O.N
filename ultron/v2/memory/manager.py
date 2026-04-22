@@ -26,7 +26,7 @@ class MemoryManager:
     async def get_context(self, query: str) -> dict:
         memories = await self.long_term.recall(query, top_k=3)
         return {
-            "working": self.working.to_messages(),
+            "working": await self.working.to_messages_async(),
             "long_term": memories,
             "token_count": self.working.token_count()
         }

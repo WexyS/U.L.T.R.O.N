@@ -1,12 +1,13 @@
 @echo off
-title Ultron v2.1 — Desktop GUI Launcher
-color 4C
+title [DEPRECATED] Ultron v2.1 — Desktop GUI Launcher
+color 0C
 echo.
-echo ============================================================
-echo  Ultron v2.1 — Personal AI Assistant (Desktop GUI)
-echo  Multi-Agent - Voice Control - System Monitor
-echo ============================================================
+echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+echo   WARNING: THIS LAUNCHER IS DEPRECATED (PyQt6 UI)
+echo   Please use start-ultron-desktop.bat for the new React UI.
+echo !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 echo.
+
 
 :: Set working directory to script location
 cd /d "%~dp0"

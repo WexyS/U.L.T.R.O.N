@@ -164,9 +164,9 @@ class Planner:
     with dependency tracking and parallel execution support.
     """
 
-    def __init__(self, llm_router, memory=None) -> None:
-        self.llm_router = llm_router
-        self.memory = memory
+    def __init__(self, router=None, **kwargs) -> None:
+        self.llm_router = router or kwargs.get("llm_router")
+        self.memory = kwargs.get("memory")
         self._active_plans: dict[str, ExecutionPlan] = {}
         self._plan_history: list[ExecutionPlan] = []
 

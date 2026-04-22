@@ -100,7 +100,7 @@ class Sandbox:
             env = self._build_safe_env(cfg)
 
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-u", str(code_file),
+                sys.executable, "-u", code_file.name,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(work_dir),
@@ -207,10 +207,10 @@ class Sandbox:
         """Build a restricted environment for the subprocess."""
         import os
 
-        # Start with minimal environment
+        # Start with a safe environment that includes the current Python's site-packages
         safe_env: dict[str, str] = {
             "PATH": os.environ.get("PATH", ""),
-            "PYTHONPATH": "",
+            "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
             "HOME": os.environ.get("HOME", os.environ.get("USERPROFILE", "")),
             "LANG": "en_US.UTF-8",
             "SANDBOX": "1",

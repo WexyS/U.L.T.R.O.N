@@ -7,6 +7,7 @@ import os
 import psutil
 import mss
 import pyperclip
+from pathlib import Path
 from typing import Any, Dict, List, Callable, Optional
 from datetime import datetime
 from duckduckgo_search import DDGS
@@ -21,7 +22,29 @@ class SkillEngine:
     def __init__(self):
         self.skills: Dict[str, Callable] = {}
         self.skill_metadata: Dict[str, Dict[str, Any]] = {}
+        self.skills_dir = Path("ultron/v2/skills")
+        self.skills_dir.mkdir(parents=True, exist_ok=True)
         self._register_core_skills()
+        self.load_dynamic_skills()
+
+    def load_dynamic_skills(self):
+        """Scan skills_dir for Python scripts and register them."""
+        import importlib.util
+        for file in self.skills_dir.glob("*.py"):
+            if file.name == "__init__.py":
+                continue
+            try:
+                module_name = f"ultron.v2.skills.{file.stem}"
+                spec = importlib.util.spec_from_file_location(module_name, file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    # Look for register_skill function
+                    if hasattr(module, "register_skill"):
+                        module.register_skill(self)
+                        logger.info(f"Dynamic skill loaded from {file.name}")
+            except Exception as e:
+                logger.error(f"Failed to load dynamic skill {file.name}: {e}")
 
     def register(self, name: str, func: Callable, description: str = ""):
         """Register a new skill."""
@@ -69,8 +92,31 @@ class SkillEngine:
         self.register("skill_screenshot", self.skill_screenshot, "Capture a screenshot of the primary monitor.")
         self.register("skill_clipboard_read", self.skill_clipboard_read, "Read text from the system clipboard.")
         self.register("skill_notification_send", self.skill_notification_send, "Send a desktop notification.")
+        self.register("skill_create_new_skill", self.skill_create_new_skill, "Create and register a new autonomous skill.")
 
     # ── Core Skill Implementations ────────────────────────────────────────
+
+    async def skill_create_new_skill(self, name: str, code: str, description: str) -> Dict[str, Any]:
+        """Agents can use this to teach Ultron new tricks."""
+        file_path = self.skills_dir / f"{name}.py"
+        
+        # Wrap code in a standard register_skill structure
+        full_code = (
+            f"import logging\n"
+            f"logger = logging.getLogger('ultron.skills.{name}')\n\n"
+            f"def {name}(**kwargs):\n"
+            f"    \"\"\"{description}\"\"\"\n"
+            f"    {code.replace(chr(10), chr(10) + '    ')}\n\n"
+            f"def register_skill(engine):\n"
+            f"    engine.register('{name}', {name}, '{description}')\n"
+        )
+        
+        try:
+            self.skill_file_write(str(file_path), full_code)
+            self.load_dynamic_skills()
+            return {"success": True, "message": f"Skill {name} created and registered."}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     async def skill_web_search(self, query: str, max_results: int = 5) -> List[Dict[str, str]]:
         """DuckDuckGo search implementation."""

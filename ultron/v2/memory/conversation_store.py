@@ -68,6 +68,9 @@ class Conversation:
         }
 
 
+from ultron.v2.memory.base_db import get_db_sync
+
+
 class ConversationStore:
     """SQLite-based conversation persistence.
 
@@ -83,7 +86,7 @@ class ConversationStore:
 
     def _init_db(self) -> None:
         """Create database schema if not exists."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS conversations (
                     id TEXT PRIMARY KEY,
@@ -117,19 +120,8 @@ class ConversationStore:
                     ON conversations(updated_at DESC);
             """)
 
-    def _get_conn(self) -> sqlite3.Connection:
-        """Get a database connection with performance optimizations."""
-        conn = sqlite3.connect(str(self.db_path), timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA cache_size=-32000")   # 32MB cache
-        conn.execute("PRAGMA synchronous=NORMAL")  # Balance between speed and safety
-        conn.execute("PRAGMA temp_store=MEMORY")   # Use RAM for temp tables
-        conn.execute("PRAGMA mmap_size=268435456") # 256MB memory map
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.row_factory = sqlite3.Row
-        return conn
-
     # ── Conversation CRUD ────────────────────────────────────────────────
+
 
     def create_conversation(
         self,
@@ -146,7 +138,7 @@ class ConversationStore:
             metadata=metadata or {},
         )
 
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             conn.execute(
                 "INSERT INTO conversations (id, title, model, mode, message_count, created_at, updated_at, metadata) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -160,7 +152,7 @@ class ConversationStore:
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """Get a conversation by ID."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             row = conn.execute(
                 "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
             ).fetchone()
@@ -177,7 +169,7 @@ class ConversationStore:
         search: Optional[str] = None,
     ) -> list[Conversation]:
         """List conversations, ordered by most recently updated."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             if search:
                 rows = conn.execute(
                     "SELECT * FROM conversations WHERE title LIKE ? "
@@ -224,7 +216,7 @@ class ConversationStore:
         params.append(datetime.now().isoformat())
         params.append(conversation_id)
 
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             result = conn.execute(
                 f"UPDATE conversations SET {', '.join(updates)} WHERE id = ?",
                 params,
@@ -233,7 +225,7 @@ class ConversationStore:
 
     def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation and all its messages."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             result = conn.execute(
                 "DELETE FROM conversations WHERE id = ?", (conversation_id,)
             )
@@ -256,7 +248,7 @@ class ConversationStore:
             metadata=metadata or {},
         )
 
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             conn.execute(
                 "INSERT INTO messages (id, conversation_id, role, content, metadata, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -296,7 +288,7 @@ class ConversationStore:
         offset: int = 0,
     ) -> list[Message]:
         """Get messages for a conversation."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             rows = conn.execute(
                 "SELECT * FROM messages WHERE conversation_id = ? "
                 "ORDER BY created_at ASC LIMIT ? OFFSET ?",
@@ -312,7 +304,7 @@ class ConversationStore:
         limit: int = 20,
     ) -> list[Message]:
         """Search messages by content."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             if conversation_id:
                 rows = conn.execute(
                     "SELECT * FROM messages WHERE conversation_id = ? AND content LIKE ? "
@@ -398,7 +390,7 @@ class ConversationStore:
 
     def get_stats(self) -> dict:
         """Database statistics."""
-        with self._get_conn() as conn:
+        with get_db_sync(self.db_path) as conn:
             conv_count = conn.execute("SELECT COUNT(*) as c FROM conversations").fetchone()["c"]
             msg_count = conn.execute("SELECT COUNT(*) as c FROM messages").fetchone()["c"]
 

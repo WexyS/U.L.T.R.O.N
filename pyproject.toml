@@ -26,6 +26,7 @@ dependencies = [
     # ── Torch (pinned to avoid conflicts between whisper/easyocr) ────
     "torch==2.3.1",
     "torchaudio==2.3.1",
+    "torchvision==0.18.1",
 
     # ── Search & Web ──────────────────────────────────────────────────
     "duckduckgo-search>=6.0.0",
@@ -34,7 +35,8 @@ dependencies = [
 
     # ── RAG & Embeddings ──────────────────────────────────────────────
     "chromadb>=0.5.0,<0.7.0",
-    "langchain>=0.2.0",
+    "langchain>=0.2.0,<0.4.0",
+
     "langchain-community>=0.2.0",
     "langchain-ollama>=0.1.0",
     "langchain-text-splitters>=0.2.0",

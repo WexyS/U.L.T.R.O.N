@@ -1,52 +1,89 @@
-"""Debugger Agent — Analyzing errors and proposing fixes."""
+"""DebuggerAgent — Autonomous error analysis and self-healing engine."""
 
-import logging
 import json
+import logging
 import re
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from ultron.v2.core.base_agent import BaseAgent, AgentTask, AgentResult, AgentStatus
 from ultron.v2.core.llm_router import router
 
 logger = logging.getLogger("ultron.agents.creation.debugger")
 
 class DebuggerAgent(BaseAgent):
+    """Analyzes stack traces and provides fixes."""
+
     def __init__(self, memory=None, skill_engine=None):
         super().__init__(
             agent_name="DebuggerAgent",
-            agent_description="Specializes in analyzing stack traces, identifying root causes, and providing code fixes.",
-            capabilities=["debugging", "error_analysis", "code_fix"],
+            agent_description="Expert system for autonomous error analysis and code fixing.",
+            capabilities=["error_analysis", "root_cause_analysis", "python_debugging", "js_debugging", "sql_debugging"],
             memory=memory,
             skill_engine=skill_engine
         )
 
     async def execute(self, task: AgentTask) -> AgentResult:
+        """Analyze an error and provide suggested fixes."""
         self.status = AgentStatus.RUNNING
-        error_info = task.input_data
-        code_context = task.context.get("code", "")
-        language = task.context.get("language", "python")
+        
+        error_message = task.input_data.get("error_message", "")
+        code = task.input_data.get("code", "")
+        language = task.input_data.get("language", "python")
+        context = task.input_data.get("context", "General execution")
 
+        if not error_message:
+            return AgentResult(
+                task_id=task.task_id,
+                agent_id=self.agent_id,
+                success=False,
+                error="No error message provided."
+            )
+
+        # 1. Classification & LLM Prompting
+        prompt = f"""
+You are an expert Debugger Agent. Analyze the following error and provide root causes and fixes.
+
+CONTEXT: {context}
+LANGUAGE: {language}
+ERROR MESSAGE:
+{error_message}
+
+CODE SNIPPET:
+{code}
+
+Return ONLY a JSON object with this structure:
+{{
+  "error_type": "...",
+  "root_cause": "...",
+  "fixes": [
+    {{"description": "...", "code": "...", "confidence": 0.95}}
+  ],
+  "prevention_tips": ["...", "..."],
+  "best_fix_index": 0
+}}
+"""
         try:
-            prompt = [
-                {"role": "system", "content": f"You are an expert debugger for {language}. Analyze the error and code. Provide a root cause analysis and a fix. Return JSON: {{\"error_type\": \"...\", \"root_cause\": \"...\", \"fix_code\": \"...\", \"explanation\": \"...\", \"prevention_tips\": \"...\"}}"},
-                {"role": "user", "content": f"Error: {error_info}\nCode:\n{code_context}"}
-            ]
-            resp = await router.chat(prompt)
+            resp = await router.chat([{"role": "user", "content": prompt}], preferred_provider="deepseek")
             
-            match = re.search(r"\{[\s\S]*\}", resp.content)
-            if match:
-                debug_result = json.loads(match.group())
-                return AgentResult(
-                    task_id=task.task_id,
-                    agent_id=self.agent_id,
-                    success=True,
-                    output=debug_result
-                )
-            return AgentResult(task_id=task.task_id, agent_id=self.agent_id, success=False, error="Could not parse debug result.")
-        except Exception as e:
-            logger.error(f"Debugging failed: {e}")
-            return AgentResult(task_id=task.task_id, agent_id=self.agent_id, success=False, error=str(e))
-        finally:
+            # Clean JSON
+            content = re.sub(r"```json\n?|\n?```", "", resp.content).strip()
+            analysis = json.loads(content)
+            
             self.status = AgentStatus.IDLE
+            return AgentResult(
+                task_id=task.task_id,
+                agent_id=self.agent_id,
+                success=True,
+                output=analysis
+            )
+        except Exception as e:
+            self.status = AgentStatus.ERROR
+            logger.error(f"DebuggerAgent failed: {e}")
+            return AgentResult(
+                task_id=task.task_id,
+                agent_id=self.agent_id,
+                success=False,
+                error=str(e)
+            )
 
     async def health_check(self) -> bool:
         return True

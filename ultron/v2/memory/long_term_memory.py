@@ -12,6 +12,7 @@ import chromadb
 from datetime import datetime, timedelta
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
+from ultron.v2.memory.base_db import get_db
 
 
 class LongTermMemory:
@@ -27,21 +28,9 @@ class LongTermMemory:
             return '""'
         return query.replace('"', '""')
 
-    def _get_db(self):
-        """Asenkron veritabanı bağlantısı ve performans ayarları."""
-        return aiosqlite.connect(self.db_path, timeout=30)
-
-    async def _apply_pragmas(self, db: aiosqlite.Connection):
-        """SQLite performans optimizasyonlarını uygula."""
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("PRAGMA cache_size=-32000")   # 32MB
-        await db.execute("PRAGMA synchronous=NORMAL")
-        await db.execute("PRAGMA temp_store=MEMORY")
-        await db.execute("PRAGMA mmap_size=268435456")  # 256MB
-
     async def init(self):
-        async with self._get_db() as db:
-            await self._apply_pragmas(db)
+        async with get_db(self.db_path) as db:
+
             await db.executescript("""
                 CREATE TABLE IF NOT EXISTS episodes (
                     id TEXT PRIMARY KEY, timestamp TEXT,
@@ -73,8 +62,7 @@ class LongTermMemory:
         )
         del emb
         gc.collect()
-        async with self._get_db() as db:
-            await self._apply_pragmas(db)
+        async with get_db(self.db_path) as db:
             await db.execute(
                 "INSERT INTO episodes VALUES (?,?,?,?,?,?)",
                 (item_id, datetime.now().isoformat(), summary,
@@ -93,8 +81,7 @@ class LongTermMemory:
         del emb
         gc.collect()
         now = datetime.now().isoformat()
-        async with self._get_db() as db:
-            await self._apply_pragmas(db)
+        async with get_db(self.db_path) as db:
             await db.execute(
                 "INSERT INTO facts VALUES (?,?,?,?,?)",
                 (item_id, content, source, confidence, now, now)
@@ -125,8 +112,7 @@ class LongTermMemory:
     async def forget_old(self, days: int = 90, importance_threshold: float = 0.2):
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
         decay_factor = 0.95
-        async with self._get_db() as db:
-            await self._apply_pragmas(db)
+        async with get_db(self.db_path) as db:
             await db.execute(
                 "UPDATE episodes SET decay = decay * ? WHERE timestamp < ? AND importance < 0.5",
                 (decay_factor, cutoff)
@@ -183,8 +169,7 @@ class LongTermMemory:
         return dot / (norm_a * norm_b)
 
     async def stats(self) -> dict:
-        async with self._get_db() as db:
-            await self._apply_pragmas(db)
+        async with get_db(self.db_path) as db:
             async with db.execute("SELECT COUNT(*) FROM episodes") as c:
                 ep_count = (await c.fetchone())[0]
             async with db.execute("SELECT COUNT(*) FROM facts") as c:

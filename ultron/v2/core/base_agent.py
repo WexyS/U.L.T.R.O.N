@@ -55,6 +55,11 @@ class BaseAgent(abc.ABC):
         self.memory = memory
         self.skill_engine = skill_engine
         self.logger = logging.getLogger(f"ultron.agents.{agent_name}")
+        
+    @property
+    def name(self) -> str:
+        """Alias for agent_name to maintain compatibility with registry."""
+        return self.agent_name
 
     @abc.abstractmethod
     async def execute(self, task: AgentTask) -> AgentResult:

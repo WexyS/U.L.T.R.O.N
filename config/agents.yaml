@@ -63,7 +63,7 @@ memory:
     run_at: "03:00"             # gece 3'te çalış
 
 llm:
-  primary: "ollama"
+  primary: "brain"
   ollama_model: "qwen2.5:14b"
   fallback_order:
     - "openrouter"

@@ -28,6 +28,7 @@ from .knowledge.academic_researcher import AcademicResearchAgent
 from .knowledge.knowledge_graph_agent import KnowledgeGraphAgent
 from .knowledge.fact_check_agent import FactCheckAgent
 from .knowledge.news_monitor_agent import NewsMonitorAgent
+from .knowledge.document_parser_agent import DocumentParserAgent
 
 # ── Ultron v3.0 Creation Agents ────────────────────────────────────
 from .creation.coder_agent_v3 import CoderAgentV3
@@ -40,7 +41,6 @@ from .creation.test_generator_agent import TestGeneratorAgent
 # ── Ultron v3.0 Data & Media Agents ────────────────────────────────
 from .data.data_analysis_agent import DataAnalysisAgent
 from .data.visualization_agent import VisualizationAgent
-from .media.document_parser_agent import DocumentParserAgent
 from .media.image_analysis_agent import ImageAnalysisAgent
 
 # ── Ultron v3.0 Finance Agents ─────────────────────────────────────
@@ -53,6 +53,13 @@ from .creative.creative_writing_agent import CreativeWritingAgent
 from .creative.game_master_agent import GameMasterAgent
 from .creative.music_composition_agent import MusicCompositionAgent
 from .creative.roleplay_agent import RoleplayAgent
+from .creative.image_generation_agent import ImageGenerationAgent
+from .creative.video_generation_agent import VideoGenerationAgent
+from .creative.image_editing_agent import ImageEditingAgent
+
+# ── Ultron v3.0 System Agents ──────────────────────────────────────
+from .system.web_monitor_agent import WebMonitorAgent
+from .productivity.calendar_task_agent import CalendarTaskAgent
 
 # ── Ultron v3.0 Technical & Security Agents ────────────────────────
 from .technical.security_audit_agent import SecurityAuditAgent
@@ -86,8 +93,10 @@ __all__ = [
     "DocumentationAgent", "TestGeneratorAgent", "DataAnalysisAgent", "VisualizationAgent",
     "DocumentParserAgent", "ImageAnalysisAgent", "FinanceTrackerAgent", "MarketMonitorAgent",
     "StorytellerAgent", "CreativeWritingAgent", "GameMasterAgent", "MusicCompositionAgent",
-    "RoleplayAgent", "SecurityAuditAgent", "SystemAdminAgent", "NetworkMonitorAgent",
+    "RoleplayAgent", "ImageGenerationAgent", "VideoGenerationAgent", "ImageEditingAgent",
+    "SecurityAuditAgent", "SystemAdminAgent", "NetworkMonitorAgent",
     "LogAnalysisAgent", "VulnerabilityScannerAgent", "VoiceControlAgent", "VisualInputAgent",
     "HardwareControlAgent", "SmartHomeAgent", "IoTSensorAgent", "SelfImprovementAgent",
-    "CuriosityAgent", "HypothesisTestingAgent", "CreativeProblemSolvingAgent", "AutonomousResearchAgent"
+    "CuriosityAgent", "HypothesisTestingAgent", "CreativeProblemSolvingAgent", "AutonomousResearchAgent",
+    "WebMonitorAgent", "CalendarTaskAgent"
 ]

@@ -26,80 +26,42 @@ class Message:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+from ultron.v2.memory.context_manager import ContextManager
+
+
 class WorkingMemory:
-    def __init__(self, max_messages: int = 50, max_tokens: int = 32000) -> None:
+    def __init__(self, max_messages: int = 50, max_tokens: int = 6000) -> None:
         self.max_messages = max_messages
         self.max_tokens = max_tokens
-        self._deque_maxlen = max(1, max_messages * 2)
-        self.messages: deque[Message] = deque(maxlen=self._deque_maxlen)
-        self._encoder = None
-        if _TIKTOKEN_AVAILABLE:
-            try:
-                self._encoder = tiktoken.get_encoding("cl100k_base")
-            except Exception:
-                self._encoder = None
+        self.context = ContextManager(max_tokens=max_tokens)
 
     def add(self, role: str, content: str, metadata: Optional[dict] = None) -> None:
-        self.messages.append(Message(role=role, content=content, metadata=metadata or {}))
+        # metadata can be used to pass explicit importance
+        importance = metadata.get("importance") if metadata else None
+        self.context.add_message(role, content, importance=importance)
 
-    def get_messages(self) -> List[Message]:
-        return list(self.messages)
+    def get_messages(self) -> List[Any]:
+        # Return ScoredMessage objects for internal use
+        return self.context.messages
+
+    async def to_messages_async(self) -> List[Dict[str, str]]:
+        """Smart retrieval with compression."""
+        return await self.context.get_context()
 
     def to_messages(self) -> List[Dict[str, str]]:
-        return [{"role": m.role, "content": m.content} for m in self.messages]
+        """Fallback sync retrieval (no compression)."""
+        return [{"role": m.role, "content": m.content} for m in self.context.messages]
 
     def token_count(self) -> int:
-        total = 0
-        for m in self.messages:
-            if self._encoder is not None:
-                total += len(self._encoder.encode(m.content))
-            else:
-                # tiktoken yoksa veya encoder yüklenemediyse: ~4 karakter ≈ 1 token
-                total += max(1, len(m.content) // 4)
-        return total
+        return sum(m.tokens for m in self.context.messages)
 
     def clear(self) -> None:
-        self.messages.clear()
-
-    def should_summarize(self, threshold: Optional[int] = None) -> bool:
-        th = threshold if threshold is not None else self.max_tokens
-        return self.token_count() > th
-
-    def summarize_if_needed(self, summarize_fn: Any = None) -> Optional[dict]:
-        """Token sınırı aşıldığında eski mesajları özetle veya kırp."""
-        if not self.should_summarize():
-            return None
-
-        messages = list(self.messages)
-        split = len(messages) // 2
-        to_summarize = messages[:split]
-        to_keep = messages[split:]
-
-        if summarize_fn is None:
-            self.messages = deque(to_keep, maxlen=self._deque_maxlen)
-            return {"type": "trimmed", "messages": self.to_messages()}
-
-        return {
-            "to_summarize": [m.content for m in to_summarize],
-            "to_keep": [{"role": m.role, "content": m.content} for m in to_keep],
-        }
-
-    def apply_summary(self, summary: str) -> None:
-        messages = list(self.messages)
-        split = len(messages) // 2
-        self.messages = deque(messages[split:], maxlen=self._deque_maxlen)
-        self.messages.appendleft(
-            Message(
-                role="system",
-                content=f"[Conversation summary: {summary}]",
-                metadata={},
-            )
-        )
+        self.context.clear()
 
     def stats(self) -> dict:
         return {
-            "message_count": len(self.messages),
-            "max_messages": self.max_messages,
+            "message_count": len(self.context.messages),
             "max_tokens": self.max_tokens,
             "token_count": self.token_count(),
         }
+
