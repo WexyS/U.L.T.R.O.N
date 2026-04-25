@@ -81,6 +81,7 @@ from .meta.curiosity_agent import CuriosityAgent
 from .meta.hypothesis_testing_agent import HypothesisTestingAgent
 from .meta.creative_problem_solving_agent import CreativeProblemSolvingAgent
 from .meta.autonomous_research_agent import AutonomousResearchAgent
+from .swarm_catalyst import SwarmCatalyst
 
 __all__ = [
     "Agent", "CoderAgent", "ResearcherAgent", "RPAOperatorAgent",
@@ -98,5 +99,5 @@ __all__ = [
     "LogAnalysisAgent", "VulnerabilityScannerAgent", "VoiceControlAgent", "VisualInputAgent",
     "HardwareControlAgent", "SmartHomeAgent", "IoTSensorAgent", "SelfImprovementAgent",
     "CuriosityAgent", "HypothesisTestingAgent", "CreativeProblemSolvingAgent", "AutonomousResearchAgent",
-    "WebMonitorAgent", "CalendarTaskAgent"
+    "WebMonitorAgent", "CalendarTaskAgent", "SwarmCatalyst"
 ]
