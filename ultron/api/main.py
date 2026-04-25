@@ -131,29 +131,46 @@ async def lifespan(app: FastAPI):
     try:
         from ultron.v2.core.agent_registry import registry
         from ultron.v2.core.react_orchestrator import ReActOrchestrator
+        from ultron.v2.core.event_bus import EventBus
+        from ultron.v2.core.blackboard import Blackboard
         import ultron.v2.agents as agents_pkg
         
-        # 1. Register Orchestrator if not exists
+        # 1. Initialize v3 Core Components
+        try:
+            _llm_router = llm
+        except NameError:
+            _llm_router = LLMRouter()
+            _llm_router.enable_all_providers(dict(os.environ))
+
+        _event_bus = EventBus()
+        _blackboard = Blackboard()
+
+        # 2. Set shared resources for the registry
+        registry.set_factory_provider("llm_router", _llm_router)
+        registry.set_factory_provider("event_bus", _event_bus)
+        registry.set_factory_provider("blackboard", _blackboard)
+
+        # 3. Register Orchestrator
         if not registry.get_agent("ReActOrchestrator"):
-            registry.register(ReActOrchestrator())
+            registry.register(ReActOrchestrator(memory=memory))
             
-        # 2. Register all specialized agents
+        # 4. Register all specialized agents lazily
+        registered_count = 0
         for attr_name in agents_pkg.__all__:
-            if attr_name == "Agent":
+            if attr_name in ("Agent", "BaseAgent"):
                 continue
             
-            agent_cls = getattr(agents_pkg, attr_name)
             try:
-                # Instantiate and register
-                instance = agent_cls()
-                if not registry.get_agent(instance.name):
-                    registry.register(instance)
-            except Exception as inner_e:
-                logger.debug(f"Could not auto-register {attr_name}: {inner_e}")
+                agent_cls = getattr(agents_pkg, attr_name)
+                desc = getattr(agent_cls, "agent_description", "Specialized Ultron Agent")
+                registry.register_lazy(attr_name, desc, agent_cls)
+                registered_count += 1
+            except Exception as reg_e:
+                logger.warning(f"Failed to register agent {attr_name}: {reg_e}")
             
-        logger.info(f"Ultron v3.0 Infrastructure Ready. {len(registry.list_agents())} agents active.")
+        logger.info(f"Ultron v3.0 Infrastructure Ready. {registered_count} agents registered.")
     except Exception as e:
-        logger.error(f"v3.0 Init Error: {e}")
+        logger.error(f"v3.0 Init Error: {e}", exc_info=True)
 
     yield
     if _use_structlog:

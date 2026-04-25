@@ -24,6 +24,11 @@ class AgentTask:
     timeout_seconds: int = 300
     created_at: datetime = field(default_factory=datetime.now)
 
+    @property
+    def id(self) -> str:
+        """Alias for task_id to support legacy v2 agents."""
+        return self.task_id
+
 @dataclass
 class AgentResult:
     task_id: str
