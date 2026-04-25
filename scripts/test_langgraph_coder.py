@@ -36,8 +36,8 @@ async def test_langgraph_coder():
     # Run the graph
     result = await run_coder_self_healing(task, llm_router, memory, max_iterations=3)
 
-    print("
-📊 Result:"    print(f"Status: {result.status}")
+    print("📊 Result:")
+    print(f"Status: {result.status}")
     print(f"Iterations: {result.metadata.get('heal_iterations', 0)}")
 
     if result.status.name == "SUCCESS":

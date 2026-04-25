@@ -27,7 +27,7 @@ _KEY_PATTERNS: List[re.Pattern] = [
     re.compile(r"(sk-or-v1-[a-zA-Z0-9]{40,})"),                # OpenRouter
     re.compile(r"(sk-ant-[a-zA-Z0-9-]{40,})"),                 # Anthropic
     re.compile(r"(gsk_[a-zA-Z0-9]{20,})"),                     # Groq
-    re.compile(r"(AIzaSy[a-zA-Z0-9_-]{33,})"),                 # Google/Gemini
+    re.compile(r"(AIzaSy[a-zA-Z0-9_-]{27,})"),                 # Google/Gemini
     re.compile(r"(hf_[a-zA-Z0-9]{20,})"),                      # HuggingFace
     re.compile(r"(xai-[a-zA-Z0-9]{20,})"),                     # xAI/Grok
     re.compile(r"(Bearer\s+[a-zA-Z0-9._-]{20,})"),             # Bearer tokens

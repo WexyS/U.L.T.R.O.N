@@ -36,6 +36,7 @@ class AgentRole(str, Enum):
     TASK_MANAGER = "task_manager"
     ERROR_ANALYZER = "error_analyzer"
     VISION = "openguider_bridge"
+    OPENGUIDER_BRIDGE = VISION
     DEBATE = "debate"
     CLONER = "cloner"
     WHATSAPP = "whatsapp"

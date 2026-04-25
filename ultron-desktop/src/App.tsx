@@ -8,6 +8,7 @@ import { useIsMobile } from './hooks/useIsMobile'
 import { MobileDrawer } from './components/MobileDrawer'
 import { SettingsPanel } from './components/SettingsPanel'
 import { API_URL, WS_URL } from './config'
+import { t, SupportedLanguage, LANGUAGES } from './i18n'
 
 // ── TYPES ──────────────────────────────────────────────────
 interface Message {
@@ -54,7 +55,7 @@ const WELCOME_CARDS = [
 ]
 
 // ── HOOKS ─────────────────────────────────────────────────
-function useWebSocket(url: string) {
+function useWebSocket(url: string, onMessage?: (event: MessageEvent) => void) {
   const ws = useRef<WebSocket | null>(null)
   const [connected, setConnected] = useState(false)
 
@@ -69,13 +70,22 @@ function useWebSocket(url: string) {
       try {
         ws.current = new WebSocket(url)
         ws.current.onopen  = () => setConnected(true)
+        ws.current.onmessage = (event) => {
+          if (onMessage) {
+            try {
+              onMessage(event)
+            } catch (error) {
+              console.error('[Ultron] WS onMessage handler failed', error)
+            }
+          }
+        }
         ws.current.onclose = () => { setConnected(false); setTimeout(connect, 3000) }
         ws.current.onerror = () => ws.current?.close()
       } catch { /* WebSocket yoksa mock mode */ }
     }
     connect()
     return () => ws.current?.close()
-  }, [url])
+  }, [url, onMessage])
 
   return { send, connected, ws }
 }
@@ -313,12 +323,13 @@ const AgentChip = ({ name, status }: Agent) => {
 
 // Sidebar
 const Sidebar = ({
-  conversations, activeId, onSelect, onNew,
+  conversations, activeId, onSelect, onNew, lang,
 }: {
   conversations: Conversation[]
   activeId: string
   onSelect: (id: string) => void
   onNew: () => void
+  lang: SupportedLanguage
 }) => (
   <div style={{
     width: 252, background: 'var(--bg1)', display: 'flex', flexDirection: 'column',
@@ -356,13 +367,13 @@ const Sidebar = ({
           width: 18, height: 18, borderRadius: 5, background: 'rgba(124,111,247,0.25)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
         }}>＋</div>
-        Yeni Konuşma
+        {t(lang, 'newConversation')}
       </button>
     </div>
 
     {/* Conv label */}
     <div style={{ padding: '14px 14px 6px', fontSize: 10, color: 'var(--t4)', fontWeight: 600, letterSpacing: 1.2, textTransform: 'uppercase' }}>
-      Geçmiş
+      {t(lang, 'history')}
     </div>
 
     {/* Conv list */}
@@ -439,7 +450,7 @@ const Sidebar = ({
 )
 
 // WelcomeScreen
-const WelcomeScreen = ({ onCardClick }: { onCardClick: (prompt: string) => void }) => (
+const WelcomeScreen = ({ onCardClick, lang }: { onCardClick: (prompt: string) => void; lang: SupportedLanguage }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -455,12 +466,17 @@ const WelcomeScreen = ({ onCardClick }: { onCardClick: (prompt: string) => void 
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
       </svg>
     </div>
-    <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>ULTRON AGI'ya hoş geldin</h1>
+    <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>{t(lang, 'title')}</h1>
     <p style={{ fontSize: 14, color: 'var(--t2)', maxWidth: 360, lineHeight: 1.6, marginBottom: 28 }}>
-      Zeki, öğrenen ve sürekli gelişen yapay zeka asistanın. Ne yapmamı istersin?
+      {t(lang, 'subtitle')}
     </p>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, width: '100%', maxWidth: 400 }}>
-      {WELCOME_CARDS.map(card => (
+      {[
+        { icon: '💻', title: t(lang, 'cardCodeTitle'), desc: t(lang, 'cardCodeDesc'), prompt: t(lang, 'sampleCode') },
+        { icon: '🔍', title: t(lang, 'cardResearchTitle'), desc: t(lang, 'cardResearchDesc'), prompt: t(lang, 'sampleResearch') },
+        { icon: '🎨', title: t(lang, 'cardImageTitle'), desc: t(lang, 'cardImageDesc'), prompt: t(lang, 'sampleImage') },
+        { icon: '📧', title: t(lang, 'cardEmailTitle'), desc: t(lang, 'cardEmailDesc'), prompt: t(lang, 'sampleEmail') },
+      ].map(card => (
         <button key={card.title} onClick={() => onCardClick(card.prompt)} style={{
           padding: '12px 14px', background: 'var(--bg2)', border: '1px solid var(--bd)',
           borderRadius: 10, cursor: 'pointer', textAlign: 'left', transition: 'all .2s',
@@ -479,7 +495,7 @@ const WelcomeScreen = ({ onCardClick }: { onCardClick: (prompt: string) => void 
 )
 
 // ChatInput
-const ChatInput = ({ onSend, disabled }: { onSend: (text: string) => void; disabled: boolean }) => {
+const ChatInput = ({ onSend, disabled, lang }: { onSend: (text: string) => void; disabled: boolean; lang: SupportedLanguage }) => {
   const [value, setValue] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
 
@@ -510,7 +526,7 @@ const ChatInput = ({ onSend, disabled }: { onSend: (text: string) => void; disab
               e.target.style.height = Math.min(e.target.scrollHeight, 130) + 'px'
             }}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
-            placeholder="ULTRON'a bir şey sor..."
+            placeholder={t(lang, 'placeholderChat')}
             rows={1}
             style={{
               flex: 1, background: 'transparent', border: 'none', outline: 'none',
@@ -557,7 +573,7 @@ const ChatInput = ({ onSend, disabled }: { onSend: (text: string) => void; disab
               {lbl}
             </div>
           ))}
-          <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--t4)' }}>⇧ Enter → yeni satır</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--t4)' }}>{t(lang, 'sendHintConnected')}</span>
         </div>
       </div>
     </div>
@@ -573,9 +589,65 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [lang, setLang] = useState<SupportedLanguage>('tr')
   const isMobile = useIsMobile()
   const msgsEndRef = useRef<HTMLDivElement>(null)
-  const { send: wsSend, connected } = useWebSocket(WS_URL)
+  const lastAssistantMessageId = useRef<string | null>(null)
+
+  const handleWsMessage = useCallback((event: MessageEvent) => {
+    try {
+      const payload = JSON.parse(event.data as string)
+      if (payload.type === 'started') {
+        setIsTyping(true)
+        return
+      }
+
+      if (payload.type === 'token') {
+        setIsTyping(false)
+        setMessages(prev => {
+          if (lastAssistantMessageId.current) {
+            return prev.map(msg =>
+              msg.id === lastAssistantMessageId.current
+                ? { ...msg, content: payload.content || msg.content }
+                : msg
+            )
+          }
+
+          const assistantId = `assistant-${Date.now()}`
+          lastAssistantMessageId.current = assistantId
+          return [...prev, {
+            id: assistantId,
+            role: 'assistant',
+            content: payload.content || '',
+            timestamp: new Date(),
+          }]
+        })
+        return
+      }
+
+      if (payload.type === 'complete') {
+        setIsTyping(false)
+        return
+      }
+
+      if (payload.type === 'error') {
+        setIsTyping(false)
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `assistant-error-${Date.now()}`,
+            role: 'assistant',
+            content: `${t(lang, 'assistantErrorPrefix')}: ${payload.content || 'Unknown error'}`,
+            timestamp: new Date(),
+          },
+        ])
+      }
+    } catch (error) {
+      console.error('[Ultron] Invalid WS payload', error)
+    }
+  }, [lang])
+
+  const { send: wsSend, connected } = useWebSocket(WS_URL, handleWsMessage)
 
   const agents: Agent[] = [
     { name: 'WebSearch', status: 'ready' },
@@ -597,12 +669,20 @@ export default function App() {
       content: text,
       timestamp: new Date(),
     }
+    lastAssistantMessageId.current = null
     setMessages(prev => [...prev, userMsg])
     setIsTyping(true)
 
     // WebSocket logic for real backend communication
     if (connected) {
-      wsSend({ type: 'message', content: text })
+      const history = messages.slice(-10).map(msg => ({ role: msg.role, content: msg.content }))
+      wsSend({
+        type: 'message',
+        message: text,
+        mode: 'chat',
+        history,
+        conversation_id: activeId || undefined,
+      })
     } else {
       // Mock mode fallback for UI testing
       setTimeout(() => {
@@ -645,6 +725,7 @@ export default function App() {
           activeId={activeId}
           onSelect={(id) => { setActiveId(id); setShowWelcome(false) }}
           onNew={handleNewChat}
+          lang={lang}
         />
       )}
 
@@ -685,14 +766,23 @@ export default function App() {
               <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--t1)', fontSize: '20px', padding: '0 8px 0 0' }}>☰</button>
             )}
             <span style={{ fontSize: 14, fontWeight: 500 }}>
-              {showWelcome ? 'ULTRON AGI' : conversations.find(c => c.id === activeId)?.title || 'Yeni Konuşma'}
+              {showWelcome ? t(lang, 'title') : conversations.find(c => c.id === activeId)?.title || t(lang, 'newConversation')}
             </span>
             <span style={{ padding: '3px 8px', background: 'var(--bg3)', border: '1px solid var(--bd)', borderRadius: 5, fontSize: 11, color: 'var(--t2)' }}>
-              {connected ? '● Online' : '○ Offline'}
+              {connected ? `● ${t(lang, 'connected')}` : `○ ${t(lang, 'disconnected')}`}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {!isMobile && agents.map(a => <AgentChip key={a.name} {...a} />)}
+            <button
+              onClick={() => setLang(lang === 'tr' ? 'en' : 'tr')}
+              style={{
+                padding: '8px 12px', borderRadius: 10, border: '1px solid var(--bd)',
+                background: 'var(--bg3)', color: 'var(--t2)', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600
+              }}
+              title={LANGUAGES[lang]}
+            >{lang === 'tr' ? 'EN' : 'TR'}</button>
             <button 
               onClick={() => setShowSettings(true)}
               style={{
@@ -706,7 +796,7 @@ export default function App() {
 
         {/* Messages or Welcome */}
         {showWelcome ? (
-          <WelcomeScreen onCardClick={handleCardClick} />
+          <WelcomeScreen onCardClick={handleCardClick} lang={lang} />
         ) : (
           <div style={{ flex: 1, overflowY: 'auto', padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
             <AnimatePresence>
@@ -733,7 +823,7 @@ export default function App() {
           ))}
         </div>
 
-        <ChatInput onSend={handleSend} disabled={isTyping} />
+        <ChatInput onSend={handleSend} disabled={isTyping} lang={lang} />
       </div>
 
       <AnimatePresence>

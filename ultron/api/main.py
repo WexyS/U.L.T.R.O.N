@@ -31,6 +31,9 @@ START_TIME = time.time()
 _orchestrator = None
 _tts_cache = {}
 
+async def get_orchestrator():
+    return _orchestrator
+
 # Logging Setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("ultron.api")

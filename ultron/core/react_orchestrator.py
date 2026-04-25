@@ -6,7 +6,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Literal
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 from ultron.core.base_agent import BaseAgent, AgentTask, AgentResult, AgentStatus
 from ultron.core.agent_registry import registry
@@ -19,20 +20,108 @@ from ultron.core.safety_filter import SafetyFilter
 
 logger = logging.getLogger("ultron.orchestrator")
 
+MAX_ITERATIONS = 8
+TOKEN_BUDGET = 1000
+
+class StepType(str, Enum):
+    THINK = "think"
+    PLAN = "plan"
+    ACT = "act"
+    OBSERVE = "observe"
+    REFLECT = "reflect"
+
 @dataclass
 class ReActStep:
-    step_type: Literal["think", "plan", "act", "observe", "reflect"]
+    step_type: StepType
     content: str
+    tokens_used: int = 0
     tool_used: Optional[str] = None
     result: Optional[Any] = None
     timestamp: datetime = field(default_factory=datetime.now)
 
 @dataclass
+class SubTask:
+    agent_name: str
+    description: str
+    input_data: str
+    parallel: bool = False
+    status: str = "pending"
+    result: Optional[Any] = None
+
+@dataclass
 class ReActChain:
     steps: List[ReActStep] = field(default_factory=list)
-    max_iterations: int = 8
+    max_iterations: int = MAX_ITERATIONS
+    token_budget: int = TOKEN_BUDGET
     current_iteration: int = 0
+    tokens_consumed: int = 0
     is_complete: bool = False
+
+    @property
+    def budget_remaining(self) -> int:
+        return max(0, self.token_budget - self.tokens_consumed)
+
+    @property
+    def budget_exhausted(self) -> bool:
+        return self.tokens_consumed >= self.token_budget
+
+    def add_step(self, step: ReActStep) -> None:
+        self.steps.append(step)
+        self.tokens_consumed += step.tokens_used
+        if self.budget_exhausted:
+            self.is_complete = True
+
+
+class AuditLogger:
+    def __init__(self, db_path: str):
+        import sqlite3
+        self.db_path = db_path
+        self._init_db()
+
+    def _init_db(self) -> None:
+        import sqlite3
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS react_audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                step_number INTEGER,
+                step_type TEXT,
+                content TEXT,
+                success INTEGER,
+                timestamp TEXT
+            )
+            """
+        )
+        conn.commit()
+        conn.close()
+
+    def log_step(self, session_id: str, step_number: int, step: ReActStep, success: bool) -> None:
+        import sqlite3
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO react_audit (session_id, step_number, step_type, content, success, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                session_id,
+                step_number,
+                step.step_type.value if isinstance(step.step_type, StepType) else str(step.step_type),
+                step.content,
+                int(success),
+                datetime.now().isoformat(),
+            )
+        )
+        conn.commit()
+        conn.close()
+
+
+def _estimate_tokens(text: str) -> int:
+    text = text.strip()
+    if not text:
+        return 0
+    return max(1, len(text) // 3)
 
 class ReActOrchestrator(BaseAgent):
     """The central AGI brain of Ultron v3.0 using ReAct + CoT reasoning."""
@@ -262,7 +351,7 @@ class ReActOrchestrator(BaseAgent):
         resp = await router.chat(prompt)
         return resp.content
 
-    async def _analyze_sentiment(self, text: str) -> str:
+    async def _analyze_sentiment(self, text: str, chain: Optional[ReActChain] = None) -> str:
         """Detects the user's emotional tone to adapt the response."""
         prompt = (
             "Analyze the emotional tone of this message. Return ONLY ONE word "
@@ -271,7 +360,10 @@ class ReActOrchestrator(BaseAgent):
         )
         try:
             resp = await router.chat([{"role": "user", "content": prompt}])
-            return resp.content.strip().upper()
+            mood = resp.content.strip().upper()
+            if mood in {"CHILL", "STRESSED", "CURIOUS", "ANGRY", "EXCITED", "CONFUSED"}:
+                return mood
+            return "CHILL"
         except Exception:
             return "CHILL"
 
