@@ -5,10 +5,10 @@ Run this to test the new graph-based implementation.
 """
 
 import asyncio
-from ultron.v2.agents.coder_langgraph import run_coder_self_healing
-from ultron.v2.core.llm_router import LLMRouter
-from ultron.v2.memory.engine import MemoryEngine
-from ultron.v2.core.types import Task
+from ultron.agents.coder_langgraph import run_coder_self_healing
+from ultron.core.llm_router import LLMRouter
+from ultron.memory.engine import MemoryEngine
+from ultron.core.types import Task
 
 
 async def test_langgraph_coder():

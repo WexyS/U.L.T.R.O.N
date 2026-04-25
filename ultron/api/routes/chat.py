@@ -49,7 +49,7 @@ async def chat_ws(ws: WebSocket):
                 continue
 
             # Persistence: Save user message
-            from ultron.v2.memory.conversation_store import ConversationStore
+            from ultron.memory.conversation_store import ConversationStore
             store = ConversationStore()
             if conversation_id:
                 try:

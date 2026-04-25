@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional, Any
-from ultron.v2.core.llm_router import LLMRouter
+from ultron.core.llm_router import LLMRouter
 
 import numpy as np
 import requests
@@ -36,7 +36,6 @@ def _env_url(key: str, default: str) -> str:
     return default.rstrip("/")
 
 OLLAMA_URL = _env_url("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-VOICEBOX_URL = _env_url("ULTRON_VOICEBOX_URL", "http://127.0.0.1:17493")
 WORKSPACE_URL = _env_url("ULTRON_WORKSPACE_URL", "http://127.0.0.1:8000")
 MODEL = os.environ.get("ULTRON_MODEL", "qwen2.5:32b")
 STT_ENGINE = os.environ.get("ULTRON_STT", "google")
@@ -48,13 +47,13 @@ VOICE_SETTINGS = {
         "stt_language": "en-US",
         "whisper_language": "en",
         "tts_voice": "en-US-JennyNeural",
-        "system_prompt_suffix": "You are Ultron, a helpful AI assistant. Respond in English.",
+        "system_prompt_suffix": "You are Ultron Genesis, a powerful AGI. Respond in English.",
     },
     "tr": {
         "stt_language": "tr-TR",
         "whisper_language": "tr",
-        "tts_voice": "tr-TR-EmelNeural",
-        "system_prompt_suffix": "Sen Ultron, yardimsever bir yapay zeka asistanisin. Turkce yanit ver.",
+        "tts_voice": "tr-TR-AhmetNeural",
+        "system_prompt_suffix": "Sen Ultron Genesis, güçlü bir AGI'sin. Türkçe yanıt ver.",
     },
 }
 
@@ -571,6 +570,8 @@ class EdgeTTS:
     async def _async_speak(self, text: str):
         import edge_tts
         import pygame
+        import re
+        import tempfile
 
         # Markdown ve ozel karakterleri temizle
         clean = re.sub(r"[#*`_\[\](){}]", "", text)
@@ -582,8 +583,14 @@ class EdgeTTS:
         tmp.close()
 
         try:
-            # MARVEL ULTRON VOICE: Lower pitch (-15Hz), slightly faster (+5%) for that clinical but menacing tone
-            communicate = edge_tts.Communicate(clean, self.voice, rate="+5%", pitch="-15Hz")
+            # ULTRON GENESIS VOICE: Deep, authoritative, and sophisticated (James Spader style)
+            voice = self.voice
+            if "en-" in voice:
+                voice = "en-US-ChristopherNeural"
+            elif "tr-" in voice:
+                voice = "tr-TR-AhmetNeural"
+                
+            communicate = edge_tts.Communicate(clean, voice, rate="-5%", pitch="-25Hz")
             await communicate.save(tmp.name)
 
             if self._stop_event.is_set():
@@ -594,7 +601,6 @@ class EdgeTTS:
             pygame.mixer.music.load(tmp.name)
             pygame.mixer.music.play()
 
-            # Barge-in: kullanan konusursa durdur
             while pygame.mixer.music.get_busy() and not self._stop_event.is_set():
                 await asyncio.sleep(0.1)
 
@@ -622,110 +628,6 @@ class EdgeTTS:
     def is_playing(self) -> bool:
         with self._lock:
             return self._playing
-
-class VoiceBoxTTS:
-    """VoiceBox API ile TTS. Basarisiz olursa EdgeTTS'e duser. Pygame ile oynatir."""
-    def __init__(self, language: str = "tr", fallback_voice: str = "tr-TR-EmelNeural"):
-        self.language = language
-        self.fallback = EdgeTTS(voice=fallback_voice)
-        self._stop_event = threading.Event()
-        self._playing = False
-        self._lock = threading.Lock()
-        
-    def speak(self, text: str) -> threading.Thread:
-        self._stop_event.clear()
-        with self._lock:
-            self._playing = True
-        t = threading.Thread(target=self._worker, args=(text,), daemon=True)
-        t.start()
-        return t
-        
-    def _worker(self, text: str):
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self._async_speak(text))
-            loop.close()
-        except Exception as e:
-            logger.warning("VoiceBoxTTS basarisiz: %s", e)
-        finally:
-            with self._lock:
-                self._playing = False
-                
-    async def _async_speak(self, text: str):
-        # Clean text
-        import re
-        import pygame
-        import httpx
-        clean = re.sub(r"[#*`_\[\](){}]", "", text)
-        clean = re.sub(r"\n{3,}", "\n\n", clean).strip()
-        if not clean: return
-        
-        tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-        tmp.close()
-        
-        used_fallback = False
-        try:
-            # 1. Try VoiceBox
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(f"{VOICEBOX_URL}/generate", json={"text": clean, "language": self.language})
-                if resp.status_code == 200:
-                    with open(tmp.name, "wb") as f:
-                        f.write(resp.content)
-                else:
-                    used_fallback = True
-        except Exception as e:
-            logger.debug(f"VoiceBox unavailable: {e}")
-            used_fallback = True
-            
-        if used_fallback:
-            # Fallback to EdgeTTS but inside our async context
-            # We just delegate to the fallback entirely and return
-            self.fallback._stop_event = self._stop_event # Share stop event
-            await self.fallback._async_speak(clean)
-            try:
-                os.unlink(tmp.name)
-            except OSError:
-                pass
-            return
-
-        # Play VoiceBox Audio
-        if self._stop_event.is_set():
-            return
-            
-        try:
-            if not pygame.mixer.get_init():
-                pygame.mixer.init(frequency=24000, size=-16, channels=1)
-            pygame.mixer.music.load(tmp.name)
-            pygame.mixer.music.play()
-            
-            while pygame.mixer.music.get_busy() and not self._stop_event.is_set():
-                await asyncio.sleep(0.1)
-                
-            pygame.mixer.music.stop()
-            pygame.mixer.quit()
-        except Exception as e:
-            logger.warning("VoiceBox oynatma hatasi: %s", e)
-        finally:
-            try:
-                os.unlink(tmp.name)
-            except OSError:
-                pass
-                
-    def stop(self):
-        self._stop_event.set()
-        self.fallback.stop()
-        try:
-            import pygame
-            if pygame.mixer.get_init():
-                pygame.mixer.music.stop()
-        except Exception:
-            pass
-
-    @property
-    def is_playing(self) -> bool:
-        with self._lock:
-            return self._playing or self.fallback.is_playing
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -832,8 +734,8 @@ class VoicePipeline:
         # VAD
         self.vad = SileroVAD(threshold=SILENCE_THRESHOLD)
 
-        # TTS (VoiceBox primarily, EdgeTTS fallback)
-        self.tts = VoiceBoxTTS(language=language, fallback_voice=_settings["tts_voice"])
+        # TTS (EdgeTTS)
+        self.tts = EdgeTTS(voice=_settings["tts_voice"])
 
         # Baglam
         system_prompt = self._build_system_prompt()
@@ -873,13 +775,12 @@ class VoicePipeline:
     # ── Sistem Promptu ────────────────────────────────────────────────────
 
     def _build_system_prompt(self) -> str:
-        """Ultron v2.0 sistem promptu — prompt.txt'den yüklenir."""
-        # prompt.txt dosyasını bul
+        """Ultron Genesis system prompt — loaded from prompt.txt."""
+        # Find prompt.txt
         prompt_file = None
         candidates = [
-            Path(__file__).parent.parent / "ultron" / "v2" / "core" / "prompt.txt",
-            Path(__file__).parent / "v2" / "core" / "prompt.txt",
-            Path(__file__).parent.parent / "PROMPT.txt",
+            Path(__file__).parent / "core" / "prompt.txt",
+            Path(__file__).parent.parent / "ultron" / "core" / "prompt.txt",
             Path(__file__).parent.parent / "prompt.txt",
         ]
         for pp in candidates:

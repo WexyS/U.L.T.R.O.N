@@ -11,7 +11,7 @@ It features a FastAPI backend, a React/Vite frontend, and integrates with numero
 **Monorepo Structure:**
 - **`Ultron/` (root):** Main project, containing the FastAPI backend (`ultron/`), React frontend (`ultron-desktop/`), and shared configurations/scripts.
 - **`Ultron Factory/`:** A separate Python project for fine-tuning large language models. It has its own build, test, and run commands.
-- **`superpowers/` & `marketing-skills/`:** These directories contain agent skills and workflows. They are external dependencies or sources of skills for Ultron agents, not core development areas for Ultron itself. *Do not apply their internal `CLAUDE.md` or `AGENTS.md` guidelines to the Ultron project.*
+- **`autonomous-skills/` & `advanced-workflows/`:** These directories contain specialized agent skills and advanced meta-methodologies. They are core skill providers for Ultron agents.
 
 ## Core Development Commands (Ultron Project)
 
@@ -80,6 +80,6 @@ This is a separate Python project within the monorepo for LLM fine-tuning.
 ## General Agent Guidelines for this Repository
 
 - **File Paths:** Always use absolute paths for file operations (`read`, `write`, `edit`).
-- **External Skill Repos:** The `superpowers/` and `marketing-skills/` directories are external skill providers. Do not apply their internal guidelines (e.g., `CLAUDE.md`, `AGENTS.md`) when working on the *Ultron* or *Ultron Factory* projects within this repository.
+- **Autonomous & Advanced Skill Repos:** The `advanced-workflows/` and `autonomous-skills/` directories are essential skill providers for the Genesis engine.
 - **Environment Variables:** Use `.env` file (copy `.env.example`) to configure API keys, URLs, and other settings.
 - **Python Virtual Environment:** Always activate `.venv` before running Python commands.

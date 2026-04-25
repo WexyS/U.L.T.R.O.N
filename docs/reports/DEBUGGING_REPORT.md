@@ -116,7 +116,7 @@
 Before deployment, verify:
 ```bash
 # Backend
-python -c "from ultron.v2.core.orchestrator import Orchestrator; print('✅ Core imports OK')"
+python -c "from ultron.core.orchestrator import Orchestrator; print('✅ Core imports OK')"
 python -c "from ultron.api.main import app; print('✅ API app OK')"
 python -m pytest tests/ -v --tb=short
 
@@ -168,12 +168,12 @@ python -c "
 import sys
 sys.path.insert(0, '.')
 try:
-    from ultron.v2.core.orchestrator import Orchestrator
+    from ultron.core.orchestrator import Orchestrator
     from ultron.api.main import app
-    from ultron.v2.agents.email_agent import EmailAgent
-    from ultron.v2.agents.clipboard_agent import ClipboardAgent
-    from ultron.v2.agents.files_agent import FilesAgent
-    from ultron.v2.agents.meeting_agent import MeetingAgent
+    from ultron.agents.email_agent import EmailAgent
+    from ultron.agents.clipboard_agent import ClipboardAgent
+    from ultron.agents.files_agent import FilesAgent
+    from ultron.agents.meeting_agent import MeetingAgent
     print('✅ All critical imports successful')
     print('✅ No syntax errors detected')
     print('✅ Ready for testing')

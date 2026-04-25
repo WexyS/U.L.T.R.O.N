@@ -6,10 +6,10 @@ import json
 import logging
 import pandas as pd
 from datetime import datetime
-from ultron.v2.core.agent_registry import registry
-from ultron.v2.core.base_agent import AgentTask
-from ultron.v2.core.security import ssrf_guard
-from ultron.v2.skills.skill_code_sandbox import sandbox
+from ultron.core.agent_registry import registry
+from ultron.core.base_agent import AgentTask
+from ultron.core.security import ssrf_guard
+from ultron.skills.skill_code_sandbox import sandbox
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)

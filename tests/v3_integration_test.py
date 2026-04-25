@@ -2,11 +2,11 @@
 
 import asyncio
 import logging
-from ultron.v2.core.agent_registry import registry
-from ultron.v2.core.react_orchestrator import ReActOrchestrator
-from ultron.v2.core.base_agent import AgentTask
-from ultron.v2.agents.cognitive.task_decomposer import TaskDecomposerAgent
-from ultron.v2.agents.knowledge.enhanced_researcher import EnhancedResearcherAgent
+from ultron.core.agent_registry import registry
+from ultron.core.react_orchestrator import ReActOrchestrator
+from ultron.core.base_agent import AgentTask
+from ultron.agents.cognitive.task_decomposer import TaskDecomposerAgent
+from ultron.agents.knowledge.enhanced_researcher import EnhancedResearcherAgent
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

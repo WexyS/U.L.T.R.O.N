@@ -184,8 +184,8 @@ Ultron: [Starts autonomous research session]
 ```python
 playwright.async_api  # Web browsing
 duckduckgo-search    # Initial search
-ultron.v2.memory.engine  # Memory storage
-ultron.v2.agents.base  # Agent base class
+ultron.memory.engine  # Memory storage
+ultron.agents.base  # Agent base class
 ```
 
 **Methods:**

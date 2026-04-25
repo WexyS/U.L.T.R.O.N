@@ -473,7 +473,7 @@ We've indexed **2,379+ MCP servers** across **67 categories**:
 3. **alirezarezvani/claude-skills** - 235+ skills ✅
 4. **VoltAgent/awesome-agent-skills** - 200+ skills ✅
 5. **anthropics/skills** - 17 official skills ✅
-6. **obra/superpowers** - 40.9k stars ✅
+6. **obra/advanced-workflows** - 40.9k stars ✅
 7. **vercel-labs/agent-skills** - Vercel standards ✅
 8. **trailofbits/skills** - Security analysis ✅
 9. **coreyhaines31/marketingskills** - 32 marketing skills ✅
@@ -515,3 +515,4 @@ We've indexed **2,379+ MCP servers** across **67 categories**:
 *This report represents the world's most comprehensive AI agent skills inventory, compiled through extensive research across 30+ repositories, 10+ MCP registries, and 15+ agent frameworks. All data validated through automated testing achieving 99.9% skill validity rate.*
 
 **🎉 CONGRATULATIONS: WE'VE SURPASSED THE 3,000 SKILLS TARGET BY 280%!**
+

@@ -40,13 +40,13 @@ def test_imports():
     print_header("TEST 1: Module Imports")
     
     modules = [
-        "ultron.v2.providers.airllm_provider",
-        "ultron.v2.agents.error_analyzer",
-        "ultron.v2.providers.router",
-        "ultron.v2.core.orchestrator",
-        "ultron.v2.core.types",
-        "ultron.v2.providers.base",
-        "ultron.v2.providers.fallback_chain",
+        "ultron.providers.airllm_provider",
+        "ultron.agents.error_analyzer",
+        "ultron.providers.router",
+        "ultron.core.orchestrator",
+        "ultron.core.types",
+        "ultron.providers.base",
+        "ultron.providers.fallback_chain",
     ]
     
     failed = []
@@ -66,7 +66,7 @@ def test_airllm_provider():
     print_header("TEST 2: AirLLM Provider")
     
     try:
-        from ultron.v2.providers.airllm_provider import AirLLMProvider
+        from ultron.providers.airllm_provider import AirLLMProvider
         
         provider = AirLLMProvider()
         
@@ -93,7 +93,7 @@ def test_error_analyzer():
     print_header("TEST 3: Error Analyzer Agent")
     
     try:
-        from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent, ErrorAnalysis
+        from ultron.agents.error_analyzer import ErrorAnalyzerAgent, ErrorAnalysis
         
         # Initialize
         analyzer = ErrorAnalyzerAgent()
@@ -133,7 +133,7 @@ def test_provider_router():
     print_header("TEST 4: Provider Router")
     
     try:
-        from ultron.v2.providers.router import ProviderRouter
+        from ultron.providers.router import ProviderRouter
         
         router = ProviderRouter()
         
@@ -147,7 +147,7 @@ def test_provider_router():
         print_result("AirLLM in routing", has_airllm)
         
         # Check task routes
-        from ultron.v2.providers.router import TASK_ROUTES
+        from ultron.providers.router import TASK_ROUTES
         default_route = TASK_ROUTES.get("default", [])
         airllm_first = default_route[0] == "airllm" if default_route else False
         print_result("AirLLM highest priority", airllm_first,
@@ -228,7 +228,7 @@ def test_types():
     print_header("TEST 7: Core Types")
     
     try:
-        from ultron.v2.core.types import AgentRole
+        from ultron.core.types import AgentRole
         
         # Check ERROR_ANALYZER role exists
         has_role = hasattr(AgentRole, 'ERROR_ANALYZER')
@@ -281,7 +281,7 @@ def test_memory_engine():
     print_header("TEST 9: Memory Engine")
     
     try:
-        from ultron.v2.memory.engine import MemoryEngine
+        from ultron.memory.engine import MemoryEngine
         
         persist_dir = "./data/memory_v2"
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
@@ -314,7 +314,7 @@ def test_automatic_fixes():
     print_header("TEST 10: Automatic Fixes")
     
     try:
-        from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
+        from ultron.agents.error_analyzer import ErrorAnalyzerAgent
         
         analyzer = ErrorAnalyzerAgent()
         

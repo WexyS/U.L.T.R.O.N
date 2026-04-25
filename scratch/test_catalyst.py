@@ -6,9 +6,9 @@ from datetime import datetime
 # Add root to sys.path
 sys.path.append(os.getcwd())
 
-from ultron.v2.core.llm_router import LLMRouter
-from ultron.v2.agents.swarm_catalyst import SwarmCatalyst
-from ultron.v2.core.base_agent import AgentTask
+from ultron.core.llm_router import LLMRouter
+from ultron.agents.swarm_catalyst import SwarmCatalyst
+from ultron.core.base_agent import AgentTask
 
 async def test_swarm_catalyst():
     print("--- Swarm Catalyst Autonomous Test ---")

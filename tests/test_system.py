@@ -10,18 +10,18 @@ def test_imports():
     """Test all critical imports"""
     print("\n[TEST 1] Module Imports")
     try:
-        from ultron.v2.core.orchestrator import Orchestrator
-        from ultron.v2.core.multi_agent_orchestrator import MultiAgentOrchestrator
-        from ultron.v2.core.llm_router import LLMRouter
-        from ultron.v2.memory.engine import MemoryEngine
-        from ultron.v2.agents.coder import CoderAgent
-        from ultron.v2.agents.researcher import ResearcherAgent
-        from ultron.v2.agents.email_agent import EmailAgent
-        from ultron.v2.agents.clipboard_agent import ClipboardAgent
-        from ultron.v2.agents.files_agent import FilesAgent
-        from ultron.v2.agents.meeting_agent import MeetingAgent
-        from ultron.v2.agents.sysmon_agent import SystemMonitorAgent
-        from ultron.v2.agents.rpa_operator import RPAOperatorAgent
+        from ultron.core.orchestrator import Orchestrator
+        from ultron.core.multi_agent_orchestrator import MultiAgentOrchestrator
+        from ultron.core.llm_router import LLMRouter
+        from ultron.memory.engine import MemoryEngine
+        from ultron.agents.coder import CoderAgent
+        from ultron.agents.researcher import ResearcherAgent
+        from ultron.agents.email_agent import EmailAgent
+        from ultron.agents.clipboard_agent import ClipboardAgent
+        from ultron.agents.files_agent import FilesAgent
+        from ultron.agents.meeting_agent import MeetingAgent
+        from ultron.agents.sysmon_agent import SystemMonitorAgent
+        from ultron.agents.rpa_operator import RPAOperatorAgent
         from ultron.api.main import app
         print("  PASS: All modules imported successfully")
         return True
@@ -33,7 +33,7 @@ def test_pydantic_models():
     """Test Pydantic v2 model serialization"""
     print("\n[TEST 2] Pydantic v2 Models")
     try:
-        from ultron.v2.workspace.models import WorkspaceItem, CloneRequest
+        from ultron.workspace.models import WorkspaceItem, CloneRequest
         from datetime import datetime
         
         item = WorkspaceItem(
@@ -59,8 +59,8 @@ def test_agent_status_enum():
     """Test agent status enum usage"""
     print("\n[TEST 3] Agent Status Enums")
     try:
-        from ultron.v2.agents.base import AgentStatus, AgentState
-        from ultron.v2.core.types import AgentRole
+        from ultron.agents.base import AgentStatus, AgentState
+        from ultron.core.types import AgentRole
         
         state = AgentState(role=AgentRole.CODER)
         state.status = AgentStatus.BUSY
@@ -109,8 +109,8 @@ def test_memory_engine():
     """Test memory engine initialization"""
     print("\n[TEST 5] Memory Engine")
     try:
-        from ultron.v2.memory.engine import MemoryEngine
-        from ultron.v2.memory.working_memory import WorkingMemory
+        from ultron.memory.engine import MemoryEngine
+        from ultron.memory.working_memory import WorkingMemory
         
         working = WorkingMemory(max_messages=20)
         
@@ -132,7 +132,7 @@ def test_event_bus():
     """Test event bus pub/sub"""
     print("\n[TEST 6] Event Bus")
     try:
-        from ultron.v2.core.event_bus import EventBus, Event
+        from ultron.core.event_bus import EventBus, Event
         import asyncio
         
         async def test():
@@ -159,16 +159,16 @@ def test_providers():
     """Test provider initialization"""
     print("\n[TEST 7] AI Providers")
     try:
-        from ultron.v2.providers.ollama_provider import OllamaProvider
-        from ultron.v2.providers.groq_provider import GroqProvider
-        from ultron.v2.providers.gemini_provider import GeminiProvider
-        from ultron.v2.providers.openrouter_provider import OpenRouterProvider
-        from ultron.v2.providers.together_provider import TogetherProvider
-        from ultron.v2.providers.cloudflare_provider import CloudflareProvider
-        from ultron.v2.providers.minimax_provider import MiniMaxProvider
-        from ultron.v2.providers.openai_provider import OpenAIProvider
-        from ultron.v2.providers.hf_provider import HFProvider
-        from ultron.v2.providers.fallback_chain import FallbackChain
+        from ultron.providers.ollama_provider import OllamaProvider
+        from ultron.providers.groq_provider import GroqProvider
+        from ultron.providers.gemini_provider import GeminiProvider
+        from ultron.providers.openrouter_provider import OpenRouterProvider
+        from ultron.providers.together_provider import TogetherProvider
+        from ultron.providers.cloudflare_provider import CloudflareProvider
+        from ultron.providers.minimax_provider import MiniMaxProvider
+        from ultron.providers.openai_provider import OpenAIProvider
+        from ultron.providers.hf_provider import HFProvider
+        from ultron.providers.fallback_chain import FallbackChain
         
         providers = [
             ("Ollama", OllamaProvider),
@@ -192,7 +192,7 @@ def test_blackboard():
     """Test blackboard shared context"""
     print("\n[TEST 8] Blackboard")
     try:
-        from ultron.v2.core.blackboard import Blackboard
+        from ultron.core.blackboard import Blackboard
         import asyncio
         
         async def test():

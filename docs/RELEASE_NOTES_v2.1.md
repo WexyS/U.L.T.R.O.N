@@ -112,7 +112,7 @@ await engine.wait_pending_tasks()
 
 **Kullanım:**
 ```python
-from ultron.v2.core.multi_agent_orchestrator import (
+from ultron.core.multi_agent_orchestrator import (
     MultiAgentOrchestrator, Task, TaskPriority
 )
 

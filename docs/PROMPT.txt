@@ -158,7 +158,7 @@ GUI (python -m ultron.cli):
   /status            → Sistem durumu
   F4                 → Mikrofon sustur/aç
 
-Terminal (python -m ultron.v2.bootstrap):
+Terminal (python -m ultron.bootstrap):
   /code <görev>      → Coder Agent
   /research <konu>   → Researcher Agent
   /rpa <görev>       → RPA Operator Agent

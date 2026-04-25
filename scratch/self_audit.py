@@ -7,8 +7,8 @@ from pathlib import Path
 # Add root to sys.path
 sys.path.append(os.getcwd())
 
-from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
-from ultron.v2.core.llm_router import LLMRouter
+from ultron.agents.error_analyzer import ErrorAnalyzerAgent
+from ultron.core.llm_router import LLMRouter
 
 async def self_audit():
     print("Ultron Self-Audit Initiation...")

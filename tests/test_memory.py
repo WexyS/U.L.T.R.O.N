@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 import aiosqlite
 import pytest
 
-from ultron.v2.memory.working_memory import WorkingMemory, Message
-from ultron.v2.memory.procedural_memory import ProceduralMemory, Procedure
+from ultron.memory.working_memory import WorkingMemory, Message
+from ultron.memory.procedural_memory import ProceduralMemory, Procedure
 
 
 # ===========================================================================
@@ -374,7 +374,7 @@ class TestLongTermMemory:
 
     async def test_fts_escape(self) -> None:
         """Verify special characters are escaped in FTS5 queries."""
-        from ultron.v2.memory.long_term_memory import LongTermMemory
+        from ultron.memory.long_term_memory import LongTermMemory
         escaped = LongTermMemory._fts_escape('test "query"')
         assert '"' in escaped
 

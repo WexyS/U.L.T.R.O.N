@@ -5,7 +5,7 @@ import json
 import os
 import logging
 from typing import List, Dict
-from ultron.v2.core.llm_router import router
+from ultron.core.llm_router import router
 
 logger = logging.getLogger("ultron.data.synthetic")
 

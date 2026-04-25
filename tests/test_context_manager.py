@@ -1,7 +1,7 @@
 """Test for Token-Aware ContextManager."""
 import pytest
 import asyncio
-from ultron.v2.memory.context_manager import ContextManager
+from ultron.memory.context_manager import ContextManager
 
 @pytest.mark.asyncio
 async def test_context_manager_importance():

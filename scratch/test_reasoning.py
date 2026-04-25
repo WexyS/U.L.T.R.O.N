@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath("."))
 
 async def test_reasoning():
     try:
-        from ultron.v2.core.reasoning_engine import ReasoningEngine
+        from ultron.core.reasoning_engine import ReasoningEngine
         engine = ReasoningEngine(router=None)
         print(f"ReasoningEngine class: {ReasoningEngine}")
         print(f"Methods: {dir(engine)}")

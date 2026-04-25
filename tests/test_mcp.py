@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ultron.v2.mcp.bridge import MCPBridge
-from ultron.v2.mcp.lifecycle import MCPClusterManager
-from ultron.v2.mcp.loader import load_mcp_settings
-from ultron.v2.mcp.schemas import MCPSettings
+from ultron.mcp.bridge import MCPBridge
+from ultron.mcp.lifecycle import MCPClusterManager
+from ultron.mcp.loader import load_mcp_settings
+from ultron.mcp.schemas import MCPSettings
 
 
 def test_load_mcp_settings_missing_file(tmp_path: Path) -> None:
@@ -42,7 +42,7 @@ def test_mcp_bridge_invoke_unknown() -> None:
 
 
 def test_openai_tool_name_sanitize() -> None:
-    from ultron.v2.mcp import bridge as b
+    from ultron.mcp import bridge as b
 
     n = b._openai_fn_name("fs", "read_file")
     assert n.startswith("ultronmcp_")

@@ -7,17 +7,17 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from ultron.v2.core.agent_registry import registry
-from ultron.v2.core.skill_engine import SkillEngine
-from ultron.v2.core.event_bus import event_bus
-from ultron.v2.core.blackboard import Blackboard
-from ultron.v2.core.llm_router import router
-from ultron.v2.core.base_agent import AgentTask
-from ultron.v2.core.react_orchestrator import ReActOrchestrator
+from ultron.core.agent_registry import registry
+from ultron.core.skill_engine import SkillEngine
+from ultron.core.event_bus import event_bus
+from ultron.core.blackboard import Blackboard
+from ultron.core.llm_router import router
+from ultron.core.base_agent import AgentTask
+from ultron.core.react_orchestrator import ReActOrchestrator
 
 # Import specific agents to test lazy loading from classes
-from ultron.v2.agents.sysmon_agent import SystemMonitorAgent
-from ultron.v2.agents.creation.coder_agent_v3 import CoderAgentV3
+from ultron.agents.sysmon_agent import SystemMonitorAgent
+from ultron.agents.creation.coder_agent_v3 import CoderAgentV3
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")

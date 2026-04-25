@@ -180,7 +180,7 @@ def check_ollama(result: HealthCheckResult):
 def check_memory_system(result: HealthCheckResult):
     """Check memory system health."""
     try:
-        from ultron.v2.memory.engine import MemoryEngine
+        from ultron.memory.engine import MemoryEngine
         
         persist_dir = "./data/memory_v2"
         Path(persist_dir).mkdir(parents=True, exist_ok=True)
@@ -196,7 +196,7 @@ def check_memory_system(result: HealthCheckResult):
 def check_providers(result: HealthCheckResult):
     """Check provider initialization."""
     try:
-        from ultron.v2.providers.router import ProviderRouter
+        from ultron.providers.router import ProviderRouter
         
         router = ProviderRouter()
         available = router.available_providers()
@@ -213,15 +213,15 @@ def check_providers(result: HealthCheckResult):
 def check_agents(result: HealthCheckResult):
     """Check agent modules can import."""
     agents = [
-        "ultron.v2.agents.coder",
-        "ultron.v2.agents.researcher",
-        "ultron.v2.agents.rpa_operator",
-        "ultron.v2.agents.email_agent",
-        "ultron.v2.agents.sysmon_agent",
-        "ultron.v2.agents.clipboard_agent",
-        "ultron.v2.agents.meeting_agent",
-        "ultron.v2.agents.files_agent",
-        "ultron.v2.agents.error_analyzer",
+        "ultron.agents.coder",
+        "ultron.agents.researcher",
+        "ultron.agents.rpa_operator",
+        "ultron.agents.email_agent",
+        "ultron.agents.sysmon_agent",
+        "ultron.agents.clipboard_agent",
+        "ultron.agents.meeting_agent",
+        "ultron.agents.files_agent",
+        "ultron.agents.error_analyzer",
     ]
 
     failed = []

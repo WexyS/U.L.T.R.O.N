@@ -4,7 +4,7 @@ import asyncio
 import logging
 from fastapi import APIRouter, HTTPException
 from ultron.api.models import AgentRequest
-from ultron.v2.core.types import AgentRole, Task
+from ultron.core.types import AgentRole, Task
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agents", tags=["agents"])

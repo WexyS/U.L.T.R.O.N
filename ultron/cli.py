@@ -1,4 +1,4 @@
-"""CLI arayüzü — Ultron'ı başlatır (GUI varsayılan, --cli ile terminal)."""
+"""CLI Entry Point — Starts Ultron Genesis (GUI default, --cli for terminal)."""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ import asyncio
 import logging
 import os
 import sys
-import threading
 from pathlib import Path
 
 from rich.console import Console
 from rich.text import Text
+from rich.markdown import Markdown
+from rich.panel import Panel
 
 from ultron.config import UltronConfig, load_config, ensure_directories
 
@@ -24,146 +25,131 @@ BANNER = Text.assemble(
     ("║  ██╔══██╗██╔══██║██║    ██╔═══╝ ██║   ██║██╔══██╗██╔══╝  ██╔══██╗║\n", "bold blue"),
     ("║  ██████╔╝██║  ██║██║    ██║     ╚██████╔╝██║  ██║███████╗██║  ██║║\n", "bold blue"),
     ("║  ╚═════╝ ╚═╝  ╚═╝╚═╝    ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝║\n", "bold blue"),
-    ("║  Qwen 2.5 14B + Claude  •  Multi-Agent  •  OpenRouter         ║\n", "bold green"),
+    ("║  GENESIS • Unified Core • Autonomous Evolution • Multi-Agent AGI   ║\n", "bold green"),
     ("╚" + "═" * 69 + "╝\n", "bold cyan"),
 )
 
 
-def _init_v2_sync(config: UltronConfig):
-    """Initialize v2 orchestrator synchronously."""
+async def _init_genesis_core(config: UltronConfig):
+    """Initialize Genesis core components and ReActOrchestrator."""
     from dotenv import load_dotenv
     load_dotenv()
-    from ultron.v2.core.llm_router import LLMRouter
-    from ultron.v2.memory.engine import MemoryEngine
-    from ultron.v2.core.orchestrator import Orchestrator
+    from ultron.core.llm_router import LLMRouter
+    from ultron.memory.engine import MemoryEngine
+    from ultron.core.react_orchestrator import ReActOrchestrator
+    from ultron.core.agent_registry import registry
+    from ultron.core.event_bus import EventBus
+    from ultron.core.blackboard import Blackboard
+    import ultron.agents as agents_pkg
 
     console.print("[dim]LLM Router başlatılıyor...[/dim]")
     llm = LLMRouter(ollama_model=config.model.ollama_model or "qwen2.5:14b")
     llm.enable_all_providers(dict(os.environ))
 
-    console.print("[dim]Memory Engine başlatılıyor...[/dim]")
-    memory = MemoryEngine(persist_dir="./data/memory_v2")
+    console.print("[dim]Genesis Core başlatılıyor...[/dim]")
+    event_bus = EventBus()
+    blackboard = Blackboard()
+    memory = MemoryEngine(persist_dir=config.memory.persist_dir or "./data/ultron_memory")
 
-    console.print("[dim]Orchestrator başlatılıyor...[/dim]")
-    orch = Orchestrator(llm_router=llm, memory=memory, work_dir="./workspace")
+    registry.set_factory_provider("llm_router", llm)
+    registry.set_factory_provider("event_bus", event_bus)
+    registry.set_factory_provider("blackboard", blackboard)
 
-    async def _bootstrap() -> None:
+    # Register Agents
+    registered_count = 0
+    for attr_name in agents_pkg.__all__:
+        if attr_name in ("Agent", "BaseAgent"): continue
         try:
-            await orch.start()
-        except Exception as exc:
-            console.print(f"[yellow]⚠[/] Orchestrator start: {exc}")
+            agent_cls = getattr(agents_pkg, attr_name)
+            desc = getattr(agent_cls, "agent_description", "Specialized Agent")
+            registry.register_lazy(attr_name, desc, agent_cls)
+            registered_count += 1
+        except Exception: pass
 
-    asyncio.run(_bootstrap())
+    console.print(f"[dim]{registered_count} ajan Genesis çekirdeğine bağlandı.[/dim]")
 
-    providers = llm.get_healthy_providers()
-    console.print(f"[green]✓[/] Providers: {', '.join(providers)}")
-    console.print(f"[green]✓[/] Agents: {list(orch.agents.keys())}")
+    orch = ReActOrchestrator()
+    registry.register(orch)
     return orch
 
 
 def run_gui(config: UltronConfig) -> None:
-    """Mark-XXXV GUI'yi başlat — SADECE v2 orchestrator ile."""
+    """Start the GUI with Genesis orchestrator."""
     ensure_directories(config)
 
-    # V2 Orchestrator (tek gerçek beyin)
     orchestrator = None
     try:
-        orchestrator = _init_v2_sync(config)
+        # Note: GUI initialization might need async wrapper if orchestrator becomes fully async
+        orchestrator = asyncio.run(_init_genesis_core(config))
     except Exception as e:
-        console.print(f"[red]✗[/] v2 Multi-Agent: {e}")
+        console.print(f"[red]✗[/] Genesis Init Hatası: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
 
-    # GUI (orchestrator ile, voice pipeline YOK — cache loop sorunu var)
     try:
         from ultron.gui_app import UltronGUI
         app = UltronGUI(pipeline=None, orchestrator=orchestrator, config=config)
         app.run()
     except Exception as e:
         console.print(f"[red]GUI başlatılamadı: {e}[/]")
-        import traceback
-        traceback.print_exc()
         sys.exit(1)
 
 
 async def async_main(config: UltronConfig) -> None:
-    """Terminal modu — v2 orchestrator ile."""
+    """Terminal mode with Genesis orchestrator."""
     console.print(BANNER)
 
-    from dotenv import load_dotenv
-    load_dotenv()
-    from ultron.v2.core.llm_router import LLMRouter
-    from ultron.v2.memory.engine import MemoryEngine
-    from ultron.v2.core.orchestrator import Orchestrator
+    orchestrator = await _init_genesis_core(config)
+    console.print("[green]✓[/] Ultron Genesis Terminali hazır. (/quit ile çıkış)\n")
 
-    llm = LLMRouter(ollama_model=config.model.ollama_model or "qwen2.5:14b")
-    llm.enable_all_providers(dict(os.environ))
-    memory = MemoryEngine(persist_dir="./data/memory_v2")
-    orch = Orchestrator(llm_router=llm, memory=memory, work_dir="./workspace")
-
-    try:
-        await orch.start()
-    except Exception as exc:
-        console.print(f"[yellow]⚠[/] Orchestrator start: {exc}")
-
-    console.print("[green]✓[/] Ultron v2.0 hazır. Yazmaya başlayın (/quit ile çıkış)\n")
+    from ultron.core.base_agent import AgentTask
 
     while True:
         try:
             user_input = console.input("[bold green]You> [/bold green]").strip()
             if not user_input:
                 continue
-            if user_input.lower() in ("quit", "exit", "q"):
+            if user_input.lower() in ("quit", "exit", "q", "/quit"):
                 break
 
-            with console.status("[dim]Ultron düşünüyor...[/dim]", spinner="dots"):
-                response = await orch.process(user_input)
+            task = AgentTask(input_data=user_input)
+            with console.status("[dim]Ultron Genesis düşünüyor...[/dim]", spinner="dots"):
+                result = await orchestrator.execute(task)
 
-            console.print(f"\n[bold cyan]Ultron:[/bold cyan] {response}\n")
+            console.print("\n[bold cyan]Ultron Genesis:[/bold cyan]")
+            if result.success:
+                console.print(Markdown(str(result.output)))
+            else:
+                console.print(f"[red]Hata: {result.error}[/red]")
+            console.print()
+
         except KeyboardInterrupt:
             break
         except Exception as e:
             console.print(f"[red]Hata: {e}[/red]")
 
-    await orch.stop()
-    console.print("\n[yellow]Güle güle.[/yellow]")
+    console.print("\n[yellow]Ultron Genesis durduruldu. Güle güle.[/yellow]")
 
 
 def main():
     import argparse
-
-    parser = argparse.ArgumentParser(description="Ultron — Kişisel Yapay Zeka Asistanı")
+    parser = argparse.ArgumentParser(description="Ultron Genesis — Unified AGI System")
     parser.add_argument("--config", "-c", help="Yapılandırma dosyası")
     parser.add_argument("--cli", action="store_true", help="Terminal modu")
     args = parser.parse_args()
 
     config = load_config(args.config)
-
-    # Resolve paths
-    project_root = Path(__file__).parent.parent
-    log_file = config.logging.file
-    if not os.path.isabs(log_file):
-        log_file = str(project_root / log_file)
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
-
-    mem_dir = config.memory.persist_dir
-    if not os.path.isabs(mem_dir):
-        config.memory.persist_dir = str(project_root / mem_dir)
-
-    doc_dir = config.documents.persist_directory
-    if not os.path.isabs(doc_dir):
-        config.documents.persist_directory = str(project_root / doc_dir)
-
-    work_dir = config.coding.work_dir
-    if not os.path.isabs(work_dir):
-        config.coding.work_dir = str(project_root / work_dir)
-
     ensure_directories(config)
+
+    # Path normalization for Genesis
+    project_root = Path(__file__).parent.parent
+    if not os.path.isabs(config.memory.persist_dir):
+        config.memory.persist_dir = str(project_root / config.memory.persist_dir)
 
     logging.basicConfig(
         level=getattr(logging, config.logging.level),
-        filename=log_file,
+        filename=os.path.join("./data", "ultron_genesis.log"),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
@@ -173,7 +159,7 @@ def main():
         except KeyboardInterrupt:
             console.print("\n[yellow]İptal.[/]")
         except Exception as e:
-            console.print(f"\n[red]Hata: {e}[/]")
+            console.print(f"\n[red]Kritik Hata: {e}[/]")
     else:
         run_gui(config)
 

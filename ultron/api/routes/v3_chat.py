@@ -7,10 +7,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request, HTTPExce
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
-from ultron.v2.core.event_bus import event_bus
-from ultron.v2.core.base_agent import AgentTask
-from ultron.v2.core.react_orchestrator import ReActOrchestrator
-from ultron.v2.core.agent_registry import registry
+from ultron.core.event_bus import event_bus
+from ultron.core.base_agent import AgentTask
+from ultron.core.react_orchestrator import ReActOrchestrator
+from ultron.core.agent_registry import registry
 
 router = APIRouter(prefix="/api/v3", tags=["Ultron v3.0"])
 logger = logging.getLogger("ultron.api.v3")
@@ -95,11 +95,11 @@ async def list_v3_agents():
 @router.get("/skills")
 async def list_skills():
     """List all discovered skills."""
-    from ultron.v2.core.skill_manager import discover_all_skills
+    from ultron.core.skill_manager import discover_all_skills
     return discover_all_skills()
 
 @router.get("/external-agents")
 async def list_external_agents():
     """List all discovered external (non-core) agents."""
-    from ultron.v2.core.skill_manager import discover_all_agents
+    from ultron.core.skill_manager import discover_all_agents
     return discover_all_agents()

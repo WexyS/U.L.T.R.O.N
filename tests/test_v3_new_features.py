@@ -5,10 +5,10 @@ import os
 import json
 import logging
 from datetime import datetime
-from ultron.v2.core.agent_registry import registry
-from ultron.v2.core.llm_router import router
-from ultron.v2.core.react_orchestrator import ReActOrchestrator
-from ultron.v2.core.base_agent import AgentTask
+from ultron.core.agent_registry import registry
+from ultron.core.llm_router import router
+from ultron.core.react_orchestrator import ReActOrchestrator
+from ultron.core.base_agent import AgentTask
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)

@@ -1,6 +1,6 @@
 """Provider Router Verification Test."""
 import pytest
-from ultron.v2.providers.router import ProviderRouter
+from ultron.providers.router import ProviderRouter
 
 
 @pytest.mark.asyncio

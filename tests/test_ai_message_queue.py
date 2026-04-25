@@ -1,7 +1,7 @@
 """Tests for AI Message Queue."""
 
 import pytest
-from ultron.v2.core.ai_message_queue import AIMessageQueue
+from ultron.core.ai_message_queue import AIMessageQueue
 
 
 @pytest.fixture

@@ -6,11 +6,11 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import dataclass
 
-from ultron.v2.core.react_orchestrator import (
+from ultron.core.react_orchestrator import (
     ReActOrchestrator, ReActChain, ReActStep, StepType,
     SubTask, AuditLogger, _estimate_tokens, MAX_ITERATIONS, TOKEN_BUDGET,
 )
-from ultron.v2.core.base_agent import AgentTask, AgentResult
+from ultron.core.base_agent import AgentTask, AgentResult
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ from ultron.v2.core.base_agent import AgentTask, AgentResult
 @pytest.fixture
 def mock_router():
     """Mock LLM router that returns predictable responses."""
-    with patch("ultron.v2.core.react_orchestrator.router") as m:
+    with patch("ultron.core.react_orchestrator.router") as m:
         resp = MagicMock()
         resp.content = '{"thinking": "test", "answer": "test response"}'
         m.chat = AsyncMock(return_value=resp)
@@ -27,7 +27,7 @@ def mock_router():
 
 @pytest.fixture
 def mock_registry():
-    with patch("ultron.v2.core.react_orchestrator.registry") as m:
+    with patch("ultron.core.react_orchestrator.registry") as m:
         m.list_agents.return_value = [
             {"name": "CoderAgent", "description": "Writes code"},
             {"name": "ResearcherAgent", "description": "Does research"},
@@ -44,9 +44,9 @@ def mock_registry():
 @pytest.fixture
 def mock_deps():
     """Mock all external dependencies."""
-    with patch("ultron.v2.core.react_orchestrator.user_profile") as up, \
-         patch("ultron.v2.core.react_orchestrator.personality_engine") as pe, \
-         patch("ultron.v2.core.react_orchestrator.event_bus") as eb:
+    with patch("ultron.core.react_orchestrator.user_profile") as up, \
+         patch("ultron.core.react_orchestrator.personality_engine") as pe, \
+         patch("ultron.core.react_orchestrator.event_bus") as eb:
         up.get_summary_for_prompt.return_value = "User: Eren, Language: Turkish"
         pe.get_system_prompt.return_value = "You are Ultron."
         pe.filter_response.side_effect = lambda x: x
@@ -56,7 +56,7 @@ def mock_deps():
 
 @pytest.fixture
 def mock_reasoner():
-    with patch("ultron.v2.core.react_orchestrator.ReasoningEngine") as cls:
+    with patch("ultron.core.react_orchestrator.ReasoningEngine") as cls:
         instance = MagicMock()
         result = MagicMock()
         result.thinking = "Let me analyze this..."
@@ -68,7 +68,7 @@ def mock_reasoner():
 
 @pytest.fixture
 def mock_safety():
-    with patch("ultron.v2.core.react_orchestrator.SafetyFilter") as cls:
+    with patch("ultron.core.react_orchestrator.SafetyFilter") as cls:
         instance = MagicMock()
         instance.check_response = AsyncMock(side_effect=lambda q, r: r)
         cls.return_value = instance

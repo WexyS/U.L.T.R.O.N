@@ -3,7 +3,7 @@ import pytest
 import asyncio
 import os
 from pathlib import Path
-from ultron.v2.core.skill_engine import SkillEngine
+from ultron.core.skill_engine import SkillEngine
 
 @pytest.mark.asyncio
 async def test_dynamic_skill_creation():

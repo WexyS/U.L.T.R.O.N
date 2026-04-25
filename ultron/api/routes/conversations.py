@@ -56,7 +56,7 @@ def _get_store():
         pass
 
     # Direct import fallback
-    from ultron.v2.memory.conversation_store import ConversationStore
+    from ultron.memory.conversation_store import ConversationStore
     return ConversationStore()
 
 
@@ -70,7 +70,7 @@ async def list_conversations(
 ):
     """List all conversations, ordered by most recent."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         conversations = store.list_conversations(limit=limit, offset=offset, search=search)
         return {
@@ -90,7 +90,7 @@ async def create_conversation(request: Optional[CreateConversationRequest] = Non
     if request is None:
         request = CreateConversationRequest()
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         conv = store.create_conversation(
             title=request.title,
@@ -108,7 +108,7 @@ async def create_conversation(request: Optional[CreateConversationRequest] = Non
 async def get_conversation(conversation_id: str):
     """Get a specific conversation."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         conv = store.get_conversation(conversation_id)
         if not conv:
@@ -125,7 +125,7 @@ async def get_conversation(conversation_id: str):
 async def update_conversation(conversation_id: str, request: UpdateConversationRequest):
     """Update a conversation's properties."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         success = store.update_conversation(
             conversation_id=conversation_id,
@@ -148,7 +148,7 @@ async def update_conversation(conversation_id: str, request: UpdateConversationR
 async def delete_all_conversations():
     """Delete ALL conversations and their messages."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         all_convs = store.list_conversations(limit=9999)
         deleted = 0
@@ -168,7 +168,7 @@ async def delete_all_conversations():
 async def delete_conversation(conversation_id: str):
     """Delete a conversation and all its messages."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         success = store.delete_conversation(conversation_id)
         if not success:
@@ -191,7 +191,7 @@ async def get_messages(
 ):
     """Get messages for a conversation."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         messages = store.get_messages(conversation_id, limit=limit, offset=offset)
         return {
@@ -208,7 +208,7 @@ async def get_messages(
 async def add_message(conversation_id: str, request: AddMessageRequest):
     """Add a message to a conversation."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
 
         # Verify conversation exists
@@ -236,7 +236,7 @@ async def add_message(conversation_id: str, request: AddMessageRequest):
 async def search_messages(request: SearchRequest):
     """Search messages across conversations."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         messages = store.search_messages(
             query=request.query,
@@ -259,7 +259,7 @@ async def search_messages(request: SearchRequest):
 async def export_conversation(conversation_id: str):
     """Export a conversation with all messages."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         data = store.export_conversation(conversation_id)
         if not data:
@@ -276,7 +276,7 @@ async def export_conversation(conversation_id: str):
 async def import_conversation(data: dict):
     """Import a conversation from exported JSON."""
     try:
-        from ultron.v2.memory.conversation_store import ConversationStore
+        from ultron.memory.conversation_store import ConversationStore
         store = ConversationStore()
         conv_id = store.import_conversation(data)
         if not conv_id:

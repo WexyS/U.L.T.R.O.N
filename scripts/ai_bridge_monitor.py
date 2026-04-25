@@ -18,12 +18,12 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
 try:
-    from ultron.v2.core.ai_bridge import bridge
+    from ultron.core.ai_bridge import bridge
 except ImportError:
     # Fallback for direct script execution
     import sys
     sys.path.append(str(PROJECT_ROOT))
-    from ultron.v2.core.ai_bridge import bridge
+    from ultron.core.ai_bridge import bridge
 
 # Paths
 REQUESTS_FILE = PROJECT_ROOT / "data" / "gemini_requests.md"

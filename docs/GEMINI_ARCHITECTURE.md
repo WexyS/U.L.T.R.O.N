@@ -339,7 +339,7 @@ start-ultron-desktop.bat
 
 ### Option C: Terminal (v2 Multi-Agent)
 ```bash
-python -m ultron.v2.bootstrap
+python -m ultron.bootstrap
 ```
 
 ### Option D: Terminal (Legacy Voice Pipeline)

@@ -1,7 +1,7 @@
 """Tests for Prompt Guard v2 with Turkish language support."""
 
 import pytest
-from ultron.v2.core.prompt_guard import PromptGuard
+from ultron.core.prompt_guard import PromptGuard
 
 
 @pytest.fixture

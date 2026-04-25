@@ -1,5 +1,5 @@
 import asyncio
-from ultron.v2.core.sandbox import Sandbox
+from ultron.core.sandbox import Sandbox
 
 async def test():
     sb = Sandbox()

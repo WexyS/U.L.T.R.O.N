@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch
-from ultron.v2.core.ssrf_guard import SSRFGuard
+from ultron.core.ssrf_guard import SSRFGuard
 
 
 @pytest.fixture

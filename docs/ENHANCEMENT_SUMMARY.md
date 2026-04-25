@@ -261,8 +261,8 @@ python -m uvicorn ultron.api.main:app --host 127.0.0.1 --port 8000
 The error analyzer works automatically when errors occur. You can also use it directly:
 
 ```python
-from ultron.v2.agents.error_analyzer import ErrorAnalyzerAgent
-from ultron.v2.core.llm_router import LLMRouter
+from ultron.agents.error_analyzer import ErrorAnalyzerAgent
+from ultron.core.llm_router import LLMRouter
 
 # Initialize
 router = LLMRouter()

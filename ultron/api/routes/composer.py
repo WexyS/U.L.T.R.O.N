@@ -40,7 +40,7 @@ def _get_composer():
         pass
 
     # Create a standalone composer
-    from ultron.v2.agents.composer_agent import ComposerAgent
+    from ultron.agents.composer_agent import ComposerAgent
     return ComposerAgent(workspace_dir="./workspace")
 
 
@@ -53,7 +53,7 @@ def _ensure_composer():
     if composer:
         return composer
     if _standalone_composer is None:
-        from ultron.v2.agents.composer_agent import ComposerAgent
+        from ultron.agents.composer_agent import ComposerAgent
         _standalone_composer = ComposerAgent(workspace_dir="./workspace")
     return _standalone_composer
 

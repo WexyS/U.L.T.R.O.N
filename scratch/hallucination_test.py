@@ -7,12 +7,12 @@ from pathlib import Path
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from ultron.v2.core.react_orchestrator import ReActOrchestrator
-from ultron.v2.core.base_agent import AgentTask
-from ultron.v2.core.agent_registry import registry
-from ultron.v2.core.event_bus import event_bus
-from ultron.v2.core.blackboard import Blackboard
-from ultron.v2.core.llm_router import router
+from ultron.core.react_orchestrator import ReActOrchestrator
+from ultron.core.base_agent import AgentTask
+from ultron.core.agent_registry import registry
+from ultron.core.event_bus import event_bus
+from ultron.core.blackboard import Blackboard
+from ultron.core.llm_router import router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -42,8 +42,8 @@ async def run_test():
     # but for a real test we want the real ones.
     # However, since we are in a headless environment, we might need to mock ImageGeneration.
     
-    from ultron.v2.agents.researcher import ResearcherAgent
-    from ultron.v2.agents.creative.image_generation_agent import ImageGenerationAgent
+    from ultron.agents.researcher import ResearcherAgent
+    from ultron.agents.creative.image_generation_agent import ImageGenerationAgent
     
     # We use registry.register_lazy (our new feature!)
     registry.register_lazy("ResearcherAgent", "Does research", ResearcherAgent)

@@ -28,7 +28,7 @@ def test_import():
     print("="*60)
     
     try:
-        from ultron.v2.providers.airllm_provider import AirLLMProvider, create_provider
+        from ultron.providers.airllm_provider import AirLLMProvider, create_provider
         print("✅ AirLLMProvider imported successfully")
         print("✅ create_provider factory imported")
         return True
@@ -44,7 +44,7 @@ def test_initialization():
     print("="*60)
     
     try:
-        from ultron.v2.providers.airllm_provider import AirLLMProvider
+        from ultron.providers.airllm_provider import AirLLMProvider
         
         provider = AirLLMProvider(
             model_name="meta-llama/Llama-3.1-405B-Instruct",
@@ -70,7 +70,7 @@ def test_model_info():
     print("="*60)
     
     try:
-        from ultron.v2.providers.airllm_provider import AirLLMProvider
+        from ultron.providers.airllm_provider import AirLLMProvider
         
         provider = AirLLMProvider(
             model_name="meta-llama/Llama-3.1-405B-Instruct",
@@ -96,7 +96,7 @@ def test_factory():
     print("="*60)
     
     try:
-        from ultron.v2.providers.airllm_provider import create_provider
+        from ultron.providers.airllm_provider import create_provider
         
         config = {
             "model_name": "meta-llama/Llama-3.1-405B-Instruct",
@@ -123,7 +123,7 @@ def test_router_integration():
     print("="*60)
     
     try:
-        from ultron.v2.providers.router import ProviderRouter, TASK_ROUTES
+        from ultron.providers.router import ProviderRouter, TASK_ROUTES
         
         print(f"✅ ProviderRouter imported")
         print(f"✅ TASK_ROUTES available")

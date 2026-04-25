@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.getcwd())
 
-from ultron.v2.core.reasoning_engine import ReasoningEngine
+from ultron.core.reasoning_engine import ReasoningEngine
 import inspect
 
 print(f"File: {inspect.getfile(ReasoningEngine)}")
